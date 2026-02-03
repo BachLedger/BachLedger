@@ -1,46 +1,84 @@
 # BachLedger
 
-## 目录结构
+**BachLedger** is a high-performance blockchain system that orchestrates parallel transaction execution with dynamic dependency detection and seamless scheduling.
+
+## Paper
+
+This project is based on the research paper published at **IEEE ICPADS 2024**:
+
+> **BachLedger: Orchestrating Parallel Execution with Dynamic Dependency Detection and Seamless Scheduling**
+>
+> Yi Yang, Guangyong Shang, Guangpeng Qi, Zhen Ma, Yaxiong Liu, Jiazhou Tian, Aocheng Duan, Meng Zhang, Jingying Li, Xuan Ding
+>
+> *2024 IEEE 30th International Conference on Parallel and Distributed Systems (ICPADS)*
+>
+> DOI: [10.1109/ICPADS63350.2024.00087](https://doi.org/10.1109/ICPADS63350.2024.00087)
+
+### Abstract
+
+BachLedger addresses the performance bottleneck of sequential transaction execution in blockchain systems. It introduces a novel approach that combines dynamic dependency detection with seamless scheduling to enable efficient parallel execution of transactions. The system automatically identifies transaction dependencies at runtime and orchestrates concurrent execution while maintaining correctness and consistency.
+
+## Repository Structure
 
 ```
-bachledger/
-├── .memo/
-├── yzchain-go/                      # 主链节点
-├── yzchain-cryptogen/               # 密钥生成工具
+BachLedger/
+├── yzchain-go/                      # Main blockchain node
+├── yzchain-cryptogen/               # Cryptographic key generation tool
 └── chain-module/
-    ├── chainconf/                   # 链配置
-    ├── common/                      # 公共库
-    ├── consensus-raft/              # Raft 共识
-    ├── consensus-solo/              # Solo 共识
-    ├── consensus-tbft/              # TBFT 共识
-    ├── consensus-utils/             # 共识工具
-    ├── localconf/                   # 本地配置
-    ├── logger/                      # 日志模块
-    ├── net-common/                  # 网络公共库
-    ├── net-libp2p/                  # libp2p 网络
-    ├── pb/                          # Protobuf 定义
-    ├── pb-go/                       # Protobuf Go 生成代码
-    ├── protocol/                    # 协议定义
+    ├── chainconf/                   # Chain configuration
+    ├── common/                      # Common utilities
+    ├── consensus-raft/              # Raft consensus module
+    ├── consensus-solo/              # Solo consensus module
+    ├── consensus-tbft/              # TBFT consensus module
+    ├── consensus-utils/             # Consensus utilities
+    ├── localconf/                   # Local configuration
+    ├── logger/                      # Logging module
+    ├── net-common/                  # Network common library
+    ├── net-libp2p/                  # libp2p network implementation
+    ├── pb/                          # Protobuf definitions
+    ├── pb-go/                       # Generated Go code from Protobuf
+    ├── protocol/                    # Protocol definitions
     ├── sdk-go/                      # Go SDK
-    ├── store/                       # 存储模块
-    ├── txpool-batch/                # 批量交易池
-    ├── txpool-normal/               # 普通交易池
-    ├── utils/                       # 工具库
-    ├── vm/                          # 虚拟机
-    ├── vm-engine/                   # 虚拟机引擎
-    ├── vm-evm/                      # EVM 虚拟机
-    ├── vm-native/                   # Native 虚拟机
-    └── ExpScript-Data/              # 实验脚本数据
+    ├── store/                       # Storage module
+    ├── txpool-batch/                # Batch transaction pool
+    ├── txpool-normal/               # Normal transaction pool
+    ├── utils/                       # Utility library
+    ├── vm/                          # Virtual machine
+    ├── vm-engine/                   # VM engine
+    ├── vm-evm/                      # EVM implementation
+    ├── vm-native/                   # Native VM
+    └── ExpScript-Data/              # Experiment scripts and data
 ```
 
-## 克隆
+## Getting Started
+
+### Clone with Submodules
 
 ```bash
-git clone --recursive <repo-url>
+git clone --recursive https://github.com/BachLedger/BachLedger.git
 ```
 
-## 更新子模块
+### Update Submodules
 
 ```bash
 git submodule update --init --recursive
 ```
+
+## Citation
+
+If you use BachLedger in your research, please cite:
+
+```bibtex
+@inproceedings{yang2024bachledger,
+  title={BachLedger: Orchestrating Parallel Execution with Dynamic Dependency Detection and Seamless Scheduling},
+  author={Yang, Yi and Shang, Guangyong and Qi, Guangpeng and Ma, Zhen and Liu, Yaxiong and Tian, Jiazhou and Duan, Aocheng and Zhang, Meng and Li, Jingying and Ding, Xuan},
+  booktitle={2024 IEEE 30th International Conference on Parallel and Distributed Systems (ICPADS)},
+  year={2024},
+  organization={IEEE},
+  doi={10.1109/ICPADS63350.2024.00087}
+}
+```
+
+## License
+
+See individual submodule repositories for license information.
