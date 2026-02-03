@@ -4,7 +4,7 @@
 
 ## Paper
 
-This project is based on the research paper published at **IEEE ICPADS 2024**:
+This is the official implementation of the research paper published at **IEEE ICPADS 2024**:
 
 > **BachLedger: Orchestrating Parallel Execution with Dynamic Dependency Detection and Seamless Scheduling**
 >
@@ -16,7 +16,7 @@ This project is based on the research paper published at **IEEE ICPADS 2024**:
 
 ### Abstract
 
-BachLedger addresses the performance bottleneck of sequential transaction execution in blockchain systems. It introduces a novel approach that combines dynamic dependency detection with seamless scheduling to enable efficient parallel execution of transactions. The system automatically identifies transaction dependencies at runtime and orchestrates concurrent execution while maintaining correctness and consistency.
+BachLedger addresses the performance bottleneck of sequential transaction execution in blockchain systems by introducing a novel approach that combines dynamic dependency detection with seamless scheduling. The system automatically identifies transaction dependencies at runtime and orchestrates concurrent execution while maintaining correctness and consistency, significantly improving blockchain throughput.
 
 ## Repository Structure
 
