@@ -1,0 +1,491 @@
+{
+  "external": [],
+  "internal": [
+    {
+      "type": "callback",
+      "name": "utils.CalcBlockHash(hashType string, b *commonPb.Block) ([]byte, error)",
+      "params": "hashType: hash algorithm string (e.g., 'SHA256'); b: block to hash",
+      "description": "Calculates unsigned block hash from block header fields (excluding BlockHash and Signature)"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CalcTxHash(hashType string, t *commonPb.Transaction) ([]byte, error)",
+      "params": "hashType: hash algorithm string; t: transaction to hash",
+      "description": "Calculates transaction hash including payload, signature, and result"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CalcDagHash(hashType string, dag *commonPb.DAG) ([]byte, error)",
+      "params": "hashType: hash algorithm string; dag: DAG structure to hash",
+      "description": "Calculates DAG hash by marshaling and hashing"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CalcRWSetRoot(hashType string, txs []*commonPb.Transaction) ([]byte, error)",
+      "params": "hashType: hash algorithm; txs: transactions containing RW set hashes",
+      "description": "Calculates merkle root of all transaction read-write set hashes"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CreateGenesis(cc *configPb.ChainConfig) (*commonPb.Block, []*commonPb.TxRWSet, error)",
+      "params": "cc: chain configuration",
+      "description": "Creates genesis block with config transaction and read-write set based on chain config"
+    },
+    {
+      "type": "callback",
+      "name": "utils.GetBlockVersion(cfgVersion string) uint32",
+      "params": "cfgVersion: version string like 'v2.3.1'",
+      "description": "Converts version string (vX.Y.Z) to uint32 block version number"
+    },
+    {
+      "type": "callback",
+      "name": "utils.VerifyTxWithoutPayload(tx *commonPb.Transaction, chainId string, ac protocol.AccessControlProvider, options ...string) error",
+      "params": "tx: transaction to verify; chainId: target chain; ac: access control provider",
+      "description": "Verifies transaction header and authentication without verifying payload"
+    },
+    {
+      "type": "callback",
+      "name": "utils.ParseCert(crtPEM []byte) (*bcx509.Certificate, error)",
+      "params": "crtPEM: PEM-encoded certificate bytes",
+      "description": "Parses PEM certificate bytes into x509 Certificate structure"
+    },
+    {
+      "type": "callback",
+      "name": "utils.GetCertHash(_, userCrtPEM []byte, hashType string) ([]byte, error)",
+      "params": "userCrtPEM: PEM certificate; hashType: hash algorithm",
+      "description": "Calculates certificate hash (certificate ID) from PEM bytes"
+    },
+    {
+      "type": "callback",
+      "name": "utils.PkToAddrStr(pk crypto.PublicKey, addrType config.AddrType, hashType crypto.HashType) (string, error)",
+      "params": "pk: public key; addrType: CHAINMAKER/ETHEREUM/ZXL; hashType: hash algorithm",
+      "description": "Generates string address from public key based on address type"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CertToAddrStr(cert *x509.Certificate, addrType config.AddrType) (string, error)",
+      "params": "cert: x509 certificate; addrType: address type",
+      "description": "Generates string address from certificate based on address type"
+    },
+    {
+      "type": "callback",
+      "name": "utils.NameToAddrStr(name string, addrType config.AddrType, blockVersion uint32) (string, error)",
+      "params": "name: contract name; addrType: address type; blockVersion: block version for anti-collision",
+      "description": "Generates contract address from name with version-aware anti-collision"
+    },
+    {
+      "type": "callback",
+      "name": "gas.GetGasLimit(tx *common.Transaction) uint64",
+      "params": "tx: transaction with Payload.Limit",
+      "description": "Extracts gas limit from transaction payload"
+    },
+    {
+      "type": "callback",
+      "name": "gas.IsGasEnabled(txSimContext protocol.TxSimContext) bool",
+      "params": "txSimContext: transaction simulation context",
+      "description": "Checks if gas is enabled in chain config's AccountConfig"
+    },
+    {
+      "type": "callback",
+      "name": "wasm.SubtractGasForPutState(contractName string, stateKey []byte, value []byte, txSimContext protocol.TxSimContext) error",
+      "params": "contractName, stateKey, value: state data; txSimContext: context for gas subtraction",
+      "description": "Calculates and subtracts gas for PutState syscall (version >= 2.3.2)"
+    },
+    {
+      "type": "callback",
+      "name": "wasm.SubtractGasForGetState(contractName string, stateKey []byte, value []byte, txSimContext protocol.TxSimContext) error",
+      "params": "contractName, stateKey: query params; value: returned data; txSimContext: context",
+      "description": "Calculates and subtracts gas for GetState syscall based on params and return size"
+    },
+    {
+      "type": "callback",
+      "name": "wasm.SubtractGasForCallContract(contractName string, method string, params map[string][]byte, returns []byte, txSimContext protocol.TxSimContext) error",
+      "params": "contractName, method, params: call parameters; returns: return data; txSimContext: context",
+      "description": "Calculates and subtracts gas for cross-contract calls"
+    },
+    {
+      "type": "callback",
+      "name": "cache.NewCacheList(name string) *CacheList",
+      "params": "name: unique cache identifier (e.g., chain ID)",
+      "description": "Gets or creates a thread-safe cache list singleton by name"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CheckChainIdFormat(chainId string) bool",
+      "params": "chainId: chain identifier string",
+      "description": "Validates chain ID format: 1-30 chars, alphanumeric and underscore only"
+    },
+    {
+      "type": "callback",
+      "name": "utils.CheckContractNameFormat(name string) bool",
+      "params": "name: contract name string",
+      "description": "Validates contract name format: 1-128 chars, alphanumeric and underscore only"
+    },
+    {
+      "type": "callback",
+      "name": "utils.GetSqlTableName(sql string) []string",
+      "params": "sql: SQL query string",
+      "description": "Parses SQL and extracts table names (with optional schema prefix)"
+    },
+    {
+      "type": "callback",
+      "name": "utils.GZipCompressBytes(data []byte) ([]byte, error)",
+      "params": "data: bytes to compress",
+      "description": "Compresses bytes using GZip with BestSpeed mode"
+    },
+    {
+      "type": "callback",
+      "name": "utils.GZipDeCompressBytes(data []byte) ([]byte, error)",
+      "params": "data: compressed bytes",
+      "description": "Decompresses GZip-compressed bytes"
+    },
+    {
+      "type": "redis",
+      "name": "gredis.RedisHandler.Init(url, auth string, db, maxIdle, maxActive, idleTimeout int) error",
+      "params": "url: Redis server address; auth: password (empty for none); db: database number; maxIdle/maxActive: pool sizes; idleTimeout: connection timeout",
+      "description": "Initializes Redis connection pool with authentication and database selection, validates connection with PING"
+    },
+    {
+      "type": "redis",
+      "name": "gredis.RedisHandler.Set(key string, data interface{}, time int) error",
+      "params": "key: Redis key; data: any value (JSON marshaled); time: TTL in seconds (0 for no expiry)",
+      "description": "Sets a JSON-serialized value in Redis with optional TTL"
+    },
+    {
+      "type": "redis",
+      "name": "gredis.RedisHandler.Get(key string) ([]byte, error)",
+      "params": "key: Redis key to retrieve",
+      "description": "Gets raw bytes value from Redis"
+    },
+    {
+      "type": "redis",
+      "name": "gredis.RedisHandler.LikeDeletes(key string) error",
+      "params": "key: pattern to match (wrapped in wildcards)",
+      "description": "Batch deletes all keys matching *key* pattern using KEYS command"
+    },
+    {
+      "type": "wal",
+      "name": "wal.Open(path string, opts *Options) (*Log, error)",
+      "params": "path: WAL directory path (created if not exists); opts: configuration (NoSync, SegmentSize, LogFormat, SegmentCacheSize, NoCopy)",
+      "description": "Opens or creates a Write-Ahead Log. Default segment size 20MB, binary format, 2 cached segments"
+    },
+    {
+      "type": "wal",
+      "name": "wal.Log.Write(index uint64, data []byte) error",
+      "params": "index: monotonically increasing entry index; data: raw bytes to write",
+      "description": "Appends entry with CRC32 checksum. Index must equal LastIndex+1 or ErrOutOfOrder returned"
+    },
+    {
+      "type": "wal",
+      "name": "wal.Log.WriteBatch(batch *Batch) error",
+      "params": "batch: Batch containing multiple entries created with batch.Write(index, data)",
+      "description": "Atomically writes multiple entries to the WAL"
+    },
+    {
+      "type": "wal",
+      "name": "wal.Log.Read(index uint64) ([]byte, error)",
+      "params": "index: entry index to read",
+      "description": "Reads entry by index, verifies CRC32 checksum. Returns ErrNotFound if index out of range"
+    },
+    {
+      "type": "wal",
+      "name": "wal.Log.TruncateFront(index uint64) error",
+      "params": "index: new first index (entries before this are deleted)",
+      "description": "Removes entries before index, deletes segment files no longer needed"
+    },
+    {
+      "type": "wal",
+      "name": "wal.Log.TruncateBack(index uint64) error",
+      "params": "index: new last index (entries after this are deleted)",
+      "description": "Removes entries after index by truncating segment file"
+    },
+    {
+      "type": "alert",
+      "name": "alert.AlertClient.SendUserAlert() error",
+      "params": "(configured via AlertClient fields: alarmCenterUrl, alertInfo with Level/Subject/Content/Receivers/Webhooks)",
+      "description": "Sends alert asynchronously via HTTP POST to ChainMaker alert center. Supports email and WeChat webhook delivery"
+    },
+    {
+      "type": "bitmap",
+      "name": "bitmap.Bitmap.Set(num int) *Bitmap",
+      "params": "num: bit position to set (auto-expands internal storage)",
+      "description": "Sets bit at position num, returns self for chaining"
+    },
+    {
+      "type": "bitmap",
+      "name": "bitmap.Bitmap.InterExist(bitmap2 *Bitmap) bool",
+      "params": "bitmap2: bitmap to check intersection with",
+      "description": "Returns true if any bit is set in both bitmaps (intersection exists)"
+    },
+    {
+      "type": "bytehelper",
+      "name": "bytehelper.StringToBytes(s string) []byte",
+      "params": "s: string to convert",
+      "description": "Zero-copy conversion from string to []byte using unsafe pointer cast"
+    },
+    {
+      "type": "bytehelper",
+      "name": "bytehelper.BytesPrefix(prefix []byte) ([]byte, []byte)",
+      "params": "prefix: byte prefix for range scan",
+      "description": "Returns (prefix, limit) tuple for range queries. Limit is prefix with last byte incremented"
+    },
+    {
+      "type": "birdsnest",
+      "name": "birdsnest.NewBirdsNest(config *BirdsNestConfig, exitC chan struct{}, strategy Strategy, logger Logger) (*BirdsNestImpl, error)",
+      "params": "config: nest configuration (Length, Cuckoo config, Rules, Snapshot); exitC: exit signal channel; strategy: full-filter strategy; logger: optional logger",
+      "description": "Creates transaction filter with multiple cuckoo filters. Automatically deserializes from snapshot if exists"
+    },
+    {
+      "type": "birdsnest",
+      "name": "birdsnest.BirdsNest.Add(key Key) error",
+      "params": "key: Key interface (Key() []byte, Len() int, GetNano() int64 for timestamp keys)",
+      "description": "Adds key to current cuckoo filter. Triggers rotation strategy if filter is full"
+    },
+    {
+      "type": "birdsnest",
+      "name": "birdsnest.BirdsNest.Contains(key Key, rules ...RuleType) (bool, error)",
+      "params": "key: key to check; rules: optional validation rules (e.g., RuleType_AbsoluteExpireTime)",
+      "description": "Checks if key exists in any filter, optionally validates against rules first"
+    },
+    {
+      "type": "callback",
+      "name": "cert.CreatePrivKey(keyType crypto.KeyType, keyPath, keyFile string, isTLS bool) (crypto.PrivateKey, error)",
+      "params": "keyType: RSA512/1024/2048/3072, ECC_NISTP256/384/521, SM2; keyPath: output directory (empty to skip file); keyFile: output filename; isTLS: unused",
+      "description": "Generates asymmetric key pair and optionally saves to PEM file with 0600 permissions"
+    },
+    {
+      "type": "callback",
+      "name": "cert.CreateCACertificate(cfg *CACertificateConfig) error",
+      "params": "cfg: PrivKey, HashType, CertPath, CertFileName, Country, Locality, Province, OrganizationalUnit, Organization, CommonName, ExpireYear (default 10), Sans",
+      "description": "Creates self-signed CA certificate with CertSign and CRLSign key usage. Computes SubjectKeyId from public key hash"
+    },
+    {
+      "type": "callback",
+      "name": "cert.CreateCSR(cfg *CSRConfig) error",
+      "params": "cfg: PrivKey, CsrPath, CsrFileName, Country, Locality, Province, OrganizationalUnit, Organization, CommonName",
+      "description": "Creates Certificate Signing Request (CSR) and saves to PEM file"
+    },
+    {
+      "type": "callback",
+      "name": "cert.IssueCertificate(cfg *IssueCertificateConfig) error",
+      "params": "cfg: HashType, IsCA, IssuerPrivKeyFilePath, IssuerCertFilePath, IssuerPrivKeyPwd, CsrFilePath, CertPath, CertFileName, ExpireYear, Sans, KeyUsages, ExtKeyUsages",
+      "description": "Issues certificate signed by CA. Verifies CSR signature, sets AuthorityKeyId from issuer, SubjectKeyId from CSR public key"
+    },
+    {
+      "type": "callback",
+      "name": "cert.ParseCertificate(certFilePath string) (*x509.Certificate, error)",
+      "params": "certFilePath: path to PEM certificate file",
+      "description": "Parses PEM certificate file into x509.Certificate using ChainMaker's bcx509 library"
+    },
+    {
+      "type": "callback",
+      "name": "cert.ComputeSKI(hashType crypto.HashType, pub interface{}) ([]byte, error)",
+      "params": "hashType: hash algorithm; pub: public key (standard Go crypto type)",
+      "description": "Computes Subject Key Identifier by hashing the SubjectPublicKeyInfo from PKIX encoding"
+    },
+    {
+      "type": "callback",
+      "name": "sortedmap.StringKeySortedMap.Range(f func(key string, val interface{}) bool)",
+      "params": "f: callback receiving key-value pairs in sorted key order; return false to stop iteration",
+      "description": "Iterates over map entries in alphabetically sorted key order. Thread-safe with lazy sorting"
+    },
+    {
+      "type": "callback",
+      "name": "sortedmap.IntKeySortedMap.Range(f func(val interface{}) bool)",
+      "params": "f: callback receiving values in sorted key order; return false to stop iteration",
+      "description": "Iterates over map values in numerically sorted key order. Thread-safe with lazy sorting"
+    },
+    {
+      "type": "callback",
+      "name": "serialize.EasyCodec.Marshal() []byte",
+      "params": "none",
+      "description": "Serializes EasyCodec items to binary format: itemCount(4) + (keyType(4) + keyLen(4) + key + valType(4) + valLen(4) + val)*. All integers are little-endian uint32"
+    },
+    {
+      "type": "callback",
+      "name": "serialize.EasyUnmarshal(data []byte) []*EasyCodecItem",
+      "params": "data: binary serialized data (with or without 'cmec' header)",
+      "description": "Deserializes binary to EasyCodecItem slice. Supports both header (cmec+v1.0+reserved) and headerless formats. Returns nil if count > 128 or key > 64 bytes"
+    },
+    {
+      "type": "callback",
+      "name": "serialize.EasyCodec.ToJson() string",
+      "params": "none",
+      "description": "Converts items to simple flat JSON. int32 as number, string as escaped string, bytes as base64-encoded string"
+    },
+    {
+      "type": "callback",
+      "name": "evmutils.Int (256-bit integer)",
+      "params": "wraps big.Int with EVM operations: Add, Sub, Mul, Div, SDiv, Mod, SMod, AddMod, MulMod, Exp, SHL, SHR, SAR, And, Or, XOr, Not, LT, GT, SLT, SGT, EQ",
+      "description": "256-bit signed/unsigned integer for EVM arithmetic. Values are masked to uint256MAX. SDiv/SMod handle signed division. SLT/SGT compare as signed"
+    },
+    {
+      "type": "callback",
+      "name": "evmutils.Keccak256(data []byte) []byte",
+      "params": "data: input bytes to hash",
+      "description": "Computes Keccak256 hash (legacy SHA3) using golang.org/x/crypto/sha3. Returns 32-byte hash"
+    },
+    {
+      "type": "callback",
+      "name": "evmutils.MakeAddress(data []byte) *Int",
+      "params": "data: arbitrary bytes",
+      "description": "Creates EVM address by taking last 20 bytes of Keccak256(data). Returns as 256-bit Int"
+    },
+    {
+      "type": "callback",
+      "name": "evmutils.ZXAddressFromPublicKey(pk crypto.PublicKey) (string, error)",
+      "params": "pk: SM2/ECDSA/RSA public key",
+      "description": "Computes ZXL format address: 'ZX' prefix + first 20 bytes of SM3(marshaled public key) as hex"
+    },
+    {
+      "type": "callback",
+      "name": "abi.ABI.Pack(funcName string, args ...interface{}) ([]byte, error)",
+      "params": "funcName: Solidity function name; args: function arguments (auto-converted to EVM types)",
+      "description": "ABI-encodes function call: 4-byte selector (Keccak256(signature)[:4]) + packed arguments. Uses Hyperledger Burrow ABI"
+    },
+    {
+      "type": "callback",
+      "name": "abi.ABI.Unpack(funcName string, data []byte) ([]interface{}, error)",
+      "params": "funcName: function name to get output spec; data: ABI-encoded return data",
+      "description": "Decodes ABI-encoded function return values to string array based on function output specification"
+    },
+    {
+      "type": "tls",
+      "name": "ca.CAClient.GetCredentialsByCA() (*credentials.TransportCredentials, error)",
+      "params": "CAClient fields: ServerName, CaPaths, CaCerts, CertFile, KeyFile, CertBytes, KeyBytes, EncCertFile, EncKeyFile (for GMTLS)",
+      "description": "Creates gRPC transport credentials with TLS/GMTLS configuration. Auto-detects double-cert mode for GMTLS 1.1"
+    },
+    {
+      "type": "tls",
+      "name": "ca.GetTLSConfig(certPemPath, certKeyPath string, caPaths, caCerts []string, encCertPemPath, encCertKeyPath string) (*cmtls.Config, error)",
+      "params": "certPemPath, certKeyPath: server cert; caPaths, caCerts: CA certs for client auth; encCertPemPath, encCertKeyPath: encryption cert for GMTLS",
+      "description": "Creates TLS server config. If enc cert paths exist, uses double-cert GMTLS 1.1 mode with signing and encryption certificates"
+    },
+    {
+      "type": "di",
+      "name": "container.Register(constructor interface{}, options ...Option) error",
+      "params": "constructor: factory function returning interface; options: Name, Interface, Lifestyle, DependsOn, Parameters, Default, Optional",
+      "description": "Registers constructor function in DI container. Constructor parameters are auto-resolved from container bindings"
+    },
+    {
+      "type": "di",
+      "name": "container.Resolve(abstraction interface{}, options ...ResolveOption) error",
+      "params": "abstraction: pointer to interface variable to fill; options: ResolveName, Arguments",
+      "description": "Resolves interface from container by calling registered constructor with auto-injected dependencies"
+    },
+    {
+      "type": "di",
+      "name": "container.Fill(structure interface{}) error",
+      "params": "structure: pointer to struct with interface fields tagged with 'optional' or 'name'",
+      "description": "Fills struct interface fields from container. Supports 'optional:true' tag and 'name:bindingName' tag for named bindings"
+    },
+    {
+      "type": "msgbus",
+      "name": "msgbus.MessageBus.Register(topic Topic, sub Subscriber)",
+      "params": "topic: Topic constant (ProposedBlock, VerifyBlock, CommitBlock, etc.); sub: Subscriber implementing OnMessage, OnQuit",
+      "description": "Registers subscriber for topic. Creates dedicated channel per topic with 10240 buffer size"
+    },
+    {
+      "type": "msgbus",
+      "name": "msgbus.MessageBus.Publish(topic Topic, payload interface{})",
+      "params": "topic: message topic; payload: any data",
+      "description": "Publishes message asynchronously. Subscribers' OnMessage called in goroutines"
+    },
+    {
+      "type": "msgbus",
+      "name": "msgbus.MessageBus.PublishSafe(topic Topic, payload interface{})",
+      "params": "topic: message topic; payload: any data",
+      "description": "Publishes message with ordering guarantee. All subscribers' OnMessage called sequentially via single channel"
+    },
+    {
+      "type": "log",
+      "name": "log.InitSugarLogger(logConfig *LogConfig, writer ...io.Writer) (*zap.SugaredLogger, zap.AtomicLevel)",
+      "params": "logConfig: Module, ChainId, LogPath, LogLevel, MaxAge (365 days default), RotationTime (6h default), RotationSize, JsonFormat, ShowLine, LogInConsole, ShowColor, IsBrief, StackTraceLevel",
+      "description": "Creates zap SugaredLogger with file rotation, optional console output, color-coded chain IDs, and configurable stack traces"
+    },
+    {
+      "type": "filter",
+      "name": "shardingbirdsnest.NewShardingBirdsNest(config *ShardingBirdsNestConfig, exitC chan struct{}, strategy bn.Strategy, alg ShardingAlgorithm, logger bn.Logger) (*ShardingBirdsNest, error)",
+      "params": "config: Length (shard count), Birdsnest (per-shard config), Snapshot, ChainId, Timeout; exitC: exit signal; strategy: full-filter strategy; alg: sharding algorithm",
+      "description": "Creates sharded transaction filter with multiple BirdsNest instances. Keys distributed via sharding algorithm (typically key modulo)"
+    },
+    {
+      "type": "filter",
+      "name": "shardingbirdsnest.ShardingBirdsNest.Adds(keys []bn.Key) error",
+      "params": "keys: slice of Key interface (Key() []byte, Len() int, GetNano() int64)",
+      "description": "Adds keys in parallel across shards. Each shard processes independently with configurable timeout"
+    },
+    {
+      "type": "crypto",
+      "name": "crypto.PrivateKey interface",
+      "params": "Sign(data []byte) ([]byte, error); SignWithOpts(data, opts); PublicKey() PublicKey; ToStandardKey() crypto.PrivateKey",
+      "description": "Private key interface for signing. Supports SM2, RSA, ECDSA (P256/P384/P521/Secp256k1), Ed25519"
+    },
+    {
+      "type": "crypto",
+      "name": "crypto.PublicKey interface",
+      "params": "Verify(data, sig []byte) (bool, error); VerifyWithOpts(data, sig, opts); ToStandardKey() crypto.PublicKey",
+      "description": "Public key interface for signature verification. SignOpts includes Hash type and UID (for SM2-SM3)"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.BlockCommitter interface",
+      "params": "AddBlock(blk *common.Block) error",
+      "description": "Commits block and read-write sets to ledger after verification. Called by consensus or sync module"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.BlockProposer interface",
+      "params": "Start/Stop; OnReceiveTxPoolSignal(signal *TxPoolSignal); OnReceiveProposeStatusChange(proposeStatus bool); OnReceiveRwSetVerifyFailTxs(failTxs)",
+      "description": "Generates new blocks when node is consensus proposer. Responds to txpool signals and consensus status changes"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.BlockVerifier interface",
+      "params": "VerifyBlock(block, mode VerifyMode) error; VerifyBlockSync(block, mode) (*VerifyResult, error); VerifyBlockWithRwSets(block, rwsets, mode) error",
+      "description": "Validates blocks. VerifyMode: CONSENSUS_VERIFY, SYNC_VERIFY, PROPOSER_VERIFY, SYNC_FILTER_VERIFY"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.BlockchainStore interface",
+      "params": "InitGenesis, PutBlock, GetBlock(height), GetBlockByHash, GetTx(txId), ReadObject(contractName, key), SelectObject, GetTxRWSet, GetHistoryForKey, GetLastBlock, GetLastHeight, Close",
+      "description": "Main storage interface for blockchain data. Supports block/tx storage, state DB (KV and SQL modes), history queries, and archive operations"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.TxSimContext interface",
+      "params": "Get/Put/Del(contractName, key); Select(name, startKey, limit); CallContract(caller, contract, method, params, gasUsed); GetTx; GetBlockHeight; GetTxRWSet(runVmSuccess); SubtractGas(gasUsed)",
+      "description": "Transaction simulation context providing read/write cache. Central to VM execution, tracks read-write sets and gas consumption"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.VmManager interface",
+      "params": "RunContract(contract, method, byteCode, parameters, txContext, gasUsed, refTxType) (*ContractResult, ExecOrderTxType, TxStatusCode); Start/Stop; BeforeSchedule/AfterSchedule",
+      "description": "Manages VM runtimes (WASM, EVM, native). Executes smart contract methods with gas metering"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.TxPool interface",
+      "params": "AddTx(tx, source TxSource); FetchTxs(blockHeight); FetchTxBatches; GetTxsByTxIds; RetryAndRemoveTxs; TxExists; GetPoolStatus",
+      "description": "Manages pending transactions. Supports single-tx (normal) and batch modes. TxSource: RPC, P2P, INTERNAL"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.AccessControlProvider interface",
+      "params": "GetHashAlg; ValidateResourcePolicy; LookUpPolicy(resourceName); CreatePrincipal(resourceName, endorsements, message); VerifyPrincipal(principal); NewMember(pbMember)",
+      "description": "Manages authentication policies and identity verification. Supports role-based (ADMIN, CLIENT, CONSENSUS) and rule-based (MAJORITY, ALL, ANY, SELF) access control"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.Net interface",
+      "params": "GetNodeUid; InitPubSub(chainId, maxMessageSize); BroadcastWithChainId; SubscribeWithChainId; SendMsg(chainId, node, msgFlag, netMsg); DirectMsgHandle; Start/Stop",
+      "description": "P2P network interface based on libp2p. Supports chain-specific pub-sub topics and direct messaging with priority control"
+    },
+    {
+      "type": "protocol",
+      "name": "protocol.ConsensusEngine interface",
+      "params": "Start() error; Stop() error",
+      "description": "Abstract consensus engine interface. Implementations: Solo (single node), TBFT (Tendermint BFT), Raft"
+    }
+  ]
+}

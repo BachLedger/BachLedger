@@ -1,0 +1,230 @@
+{
+  "modules": [
+    {
+      "name": "chain-module/utils",
+      "description": "Go utility library for ChainMaker blockchain platform, providing blockchain data structure utilities, cryptographic helpers, gas calculation, and validation tools",
+      "interfaces": "Exports functions for block/transaction/DAG hash calculation, certificate operations, address generation, genesis block creation, gas management; depends on chainmaker.org/chainmaker/pb-go/v2 (protobuf types), chainmaker.org/chainmaker/protocol/v2 (interfaces), chainmaker.org/chainmaker/common/v2 (crypto)",
+      "internal": {
+        "submodules": [
+          {
+            "name": "utils (root)",
+            "description": "Core utilities for blocks, transactions, DAG, read-write sets, genesis, certificates, addresses, DPoS, system contracts, SQL parsing, compression, string manipulation, format validation",
+            "interfaces": "CalcBlockHash, CalcTxHash, CalcDagHash, CalcRWSetRoot, CreateGenesis, GetCertHash, ParseCert, NameToAddrStr, PkToAddrStr, CertToAddrStr, GZipCompressBytes, GetSqlTableName, CheckChainIdFormat, CheckContractNameFormat"
+          },
+          {
+            "name": "gas",
+            "description": "Gas calculation and management utilities for smart contract execution",
+            "interfaces": "GetGasLimit, IsGasEnabled, MultiplyGasPrice, NewGasConfig"
+          },
+          {
+            "name": "gas/common",
+            "description": "Common gas calculation logic and syscall constants",
+            "interfaces": "CalculateGas, GetDefaultGas; defines syscall name constants (PUT_STATE_SYSCALL, GET_STATE_SYSCALL, etc.)"
+          },
+          {
+            "name": "gas/wasm",
+            "description": "WASM-specific gas calculation for syscalls with version-aware pricing",
+            "interfaces": "SubtractGasForPutState, SubtractGasForGetState, SubtractGasForCallContract, SubtractGasForEmitEvent, SubtractGasForKvIterator, SubtractGasForExecuteQuery, SubtractGasForExecuteUpdate"
+          },
+          {
+            "name": "gas/mock",
+            "description": "Mock implementations for testing gas calculation",
+            "interfaces": "MockTxSimContext, CalcStringListDataSize, CalcBytesMapDataSize, CalcBatchKeysParamsSize"
+          },
+          {
+            "name": "cache",
+            "description": "Thread-safe cache list using sync.Map for blacklist management",
+            "interfaces": "NewCacheList, Put, Delete, Exists"
+          }
+        ],
+        "relationships": "gas/wasm → gas/common (uses constants and CalculateGas); gas/mock → protocol.TxSimContext (implements interface); root utils → cache (for blacklist filtering); all → pb-go/v2 (protobuf types)"
+      }
+    },
+    {
+      "name": "chain-module/common",
+      "description": "Common shared library for ChainMaker blockchain platform providing cryptographic primitives, encoding utilities, Redis client, WAL, and foundational types used across other modules",
+      "interfaces": "Provides crypto, hash, certificate, encoding utilities, Redis handler, and WAL; consumed by chain-module/utils and other ChainMaker modules",
+      "internal": {
+        "submodules": [
+          {
+            "name": "gredis",
+            "description": "Redis client wrapper providing connection pooling and common Redis operations (Get/Set/Delete/Exists/TTL/Incr) with JSON serialization support",
+            "interfaces": "NewRedisHandler, Init, Set, SetVal, Get, GetString, GetInt, Exists, Ttl, Delete, LikeDeletes, Incr, GetSumLikeKeys"
+          },
+          {
+            "name": "wal",
+            "description": "Write-Ahead Log implementation based on tidwall/wal v0.1.4 with CRC32 checksum verification. Supports segmented log files (default 20MB), Binary/JSON formats, LRU segment cache, and discards corrupted entries on restart",
+            "interfaces": "Open, Log.Write, Log.WriteBatch, Log.Read, Log.FirstIndex, Log.LastIndex, Log.TruncateFront, Log.TruncateBack, Log.Close, Log.Sync, Log.ClearCache, NewCRC"
+          },
+          {
+            "name": "alert",
+            "description": "Alert notification client for sending alerts via email and enterprise WeChat webhooks to ChainMaker alert center",
+            "interfaces": "AlertClient.SendUserAlert, AlertClient.SendUserAlertSync"
+          },
+          {
+            "name": "bitmap",
+            "description": "Simple bitmap implementation using uint64 words for bit storage with set operations (Or, Xor, InterExist)",
+            "interfaces": "Bitmap.Has, Bitmap.Set, Bitmap.Or, Bitmap.Xor, Bitmap.InterExist, Bitmap.Clone, Bitmap.Pos1"
+          },
+          {
+            "name": "bytehelper",
+            "description": "Byte conversion utilities for little-endian int/uint encoding and zero-copy string/bytes conversion",
+            "interfaces": "BytesToInt, BytesToInt64, IntToBytes, Int64ToBytes, BytesToUint64, Uint64ToBytes, BytesPrefix, StringToBytes, BytesToString"
+          },
+          {
+            "name": "birdsnest",
+            "description": "Transaction duplicate filter using clustered Cuckoo Filters ('Bird's Nest'). Maintains multiple filters with rotation strategy, supports time-based key expiration, and provides snapshot persistence",
+            "interfaces": "NewBirdsNest, BirdsNest.Add, BirdsNest.Adds, BirdsNest.Contains, BirdsNest.GetHeight, BirdsNest.SetHeight, BirdsNest.Info, NewCuckooFilter, CuckooFilter.Add, CuckooFilter.Contains"
+          },
+          {
+            "name": "cert",
+            "description": "X.509 certificate management for creating CA certificates, CSRs, and issuing certificates. Supports RSA, ECC (NIST P256/P384/P521), and SM2 algorithms with ChainMaker's extended x509 library",
+            "interfaces": "CreatePrivKey, CreateCACertificate, CreateCSR, IssueCertificate, ParseCertificate, ParseCertificateRequest, ParseCertificateToJson, ComputeSKI, GenerateCertTemplate, GenerateCSRTemplate"
+          },
+          {
+            "name": "sortedmap",
+            "description": "Thread-safe sorted map implementations with lazy sorting. Provides maps keyed by string, int, or float64 that iterate in sorted key order. Uses sync.Map for storage with RWMutex-protected key slice",
+            "interfaces": "NewStringKeySortedMap, NewIntKeySortedMap, NewFloat64KeySortedMap, Put, Get, Contains, Remove, Range, Length"
+          },
+          {
+            "name": "serialize",
+            "description": "EasyCodec binary serialization format for ChainMaker smart contract data interchange. Supports typed key-value pairs (int32/string/bytes) with deterministic encoding using little-endian uint32 and sorted keys",
+            "interfaces": "NewEasyCodec, NewEasyCodecWithMap, NewEasyCodecWithBytes, AddInt32, AddString, AddBytes, GetInt32, GetString, GetBytes, Marshal, ToJson, ToMap, EasyMarshal, EasyUnmarshal"
+          },
+          {
+            "name": "evmutils",
+            "description": "Ethereum Virtual Machine utilities: 256-bit integer arithmetic, EVM address handling, Keccak256 hashing, Solidity ABI encoding/decoding, and ZXL (Zhi Xin Lian) address format support. Based on SealEVM and Hyperledger Burrow ABI",
+            "interfaces": "Int (256-bit), Address, Keccak256, MakeAddress, BytesToAddress, ZXAddressFromPublicKey, ZXAddressFromCertificatePEM, ABI.Pack, ABI.Unpack, ReadSpec, EncodeFunctionCall, DecodeFunctionReturn"
+          },
+          {
+            "name": "ca",
+            "description": "TLS/mTLS client and server configuration with support for standard TLS and GMTLS (SM2-based). Handles certificate pool management and gRPC transport credentials",
+            "interfaces": "CAClient.GetCredentialsByCA, GetTLSConfig, NewTLSListener, loadCerts, addTrust, addGMTrust"
+          },
+          {
+            "name": "concurrentlru",
+            "description": "Thread-safe LRU cache wrapper around github.com/golang/groupcache/lru with mutex protection",
+            "interfaces": "New, Cache.Add, Cache.Get, Cache.Remove, Cache.RemoveOldest, Cache.Len, Cache.Clear"
+          },
+          {
+            "name": "container",
+            "description": "IoC/Dependency Injection container with constructor registration, named bindings, singleton/transient lifecycle, and struct field injection via tags",
+            "interfaces": "NewContainer, Register, RegisterInstance, RegisterSubInterface, Resolve, Call, Fill, Reset, Clone; Options: Name, Interface, Lifestyle, DependsOn, Parameters, Default, Optional"
+          },
+          {
+            "name": "errors",
+            "description": "Error code definitions and JSON-RPC error types. Includes system contract errors, tx pool errors, core errors, sync errors with bilingual messages (EN/CN)",
+            "interfaces": "ErrCode (int32 with String method), JsonError (implements Error interface), predefined errors: ErrParseError, ErrInvalidRequest, ErrTxIdExist, ErrTxPoolLimit, etc."
+          },
+          {
+            "name": "helper",
+            "description": "Network helper utilities for P2P networking: extract node ID from multiaddr, generate libp2p peer ID from certificates/public keys",
+            "interfaces": "GetNodeUidFromAddr, GetLibp2pPeerIdFromCert, GetLibp2pPeerIdFromCertDer, CreateLibp2pPeerIdWithPrivateKey, CreateLibp2pPeerIdWithPublicKey, ParseGoPublicKeyToPubKey, P2pAddressFormatVerify"
+          },
+          {
+            "name": "httputils",
+            "description": "HTTP client utilities with configurable client, 5s default timeout, and retry logic (up to 3 retries for POST)",
+            "interfaces": "GET(client, url), POST(client, url, reqObj)"
+          },
+          {
+            "name": "json",
+            "description": "JSON wrapper using github.com/json-iterator/go for faster JSON serialization than encoding/json",
+            "interfaces": "Marshal, MarshalIndent, Unmarshal, NewDecoder"
+          },
+          {
+            "name": "linkedhashmap",
+            "description": "Insertion-order preserving hash map using container/list for ordering",
+            "interfaces": "NewLinkedHashMap, Add, Get, Remove, Size, GetLinkList"
+          },
+          {
+            "name": "log",
+            "description": "Structured logging using uber-go/zap with file rotation (via rotatelogs), configurable levels (DEBUG/INFO/WARN/ERROR), JSON/console format, colored output, and stack traces",
+            "interfaces": "LoggerInterface, InitSugarLogger, LogConfig (Module, ChainId, LogPath, LogLevel, MaxAge, RotationTime, RotationSize, JsonFormat, ShowLine, LogInConsole, ShowColor, IsBrief, StackTraceLevel)"
+          },
+          {
+            "name": "monitor",
+            "description": "Prometheus metrics utilities for blockchain monitoring: counters, histograms, gauges with predefined metrics for blocks, transactions, TPS, gas usage",
+            "interfaces": "NewCounterVec, NewHistogramVec, NewGaugeVec, NewHistogram; constants for subsystems (grpc, committer, txpool, vm) and metric names"
+          },
+          {
+            "name": "msgbus",
+            "description": "Pub-sub message bus for cross-module communication with topic-based subscription, async/safe/sync publish modes, and 10240 message buffer per topic",
+            "interfaces": "MessageBus interface: Register, UnRegister, Publish, PublishSafe, PublishSync, Close; Subscriber interface: OnMessage, OnQuit; Topics: ProposedBlock, VerifyBlock, CommitBlock, TxPoolSignal, ChainConfig, etc."
+          },
+          {
+            "name": "queue",
+            "description": "Thread-safe doubly-linked list queue (deque) supporting front/back push/poll operations with iterator support",
+            "interfaces": "Queue interface: PushFront, PushBack, PeekFront, PeekBack, PollFront, PollBack, Remove, Exist, Size, IsEmpty, Clear, NewIterator; Iterator: Value, Next"
+          },
+          {
+            "name": "report",
+            "description": "Chart generation utility using go-echarts for stress testing reports, outputs HTML bar charts",
+            "interfaces": "Report(title, subtitle, xAxis, series...)"
+          },
+          {
+            "name": "shardingbirdsnest",
+            "description": "Sharded transaction duplicate filter distributing keys across multiple BirdsNest instances using configurable sharding algorithm (key modulo). Supports parallel adds with timeout",
+            "interfaces": "NewShardingBirdsNest, ShardingBirdsNest.Add, Adds, AddsAndSetHeight, Contains, ValidateRule, GetHeight, SetHeight, Info, Infos; ShardingAlgorithm interface: DoSharding, DoShardingOnce"
+          },
+          {
+            "name": "crypto",
+            "description": "Cryptographic type definitions: hash types (SHA256, SHA3_256, SM3), key types (RSA, SM2, ECC curves), and interfaces for symmetric/asymmetric keys, signing, encryption",
+            "interfaces": "Key, SymmetricKey (Encrypt, Decrypt), PrivateKey (Sign, PublicKey), PublicKey (Verify), DecryptKey, EncryptKey, Encryptor; SignOpts, EncOpts structs"
+          },
+          {
+            "name": "opencrypto",
+            "description": "Crypto engine type constants for pluggable cryptographic backends: GmSSL, TencentSM, TjfocGM",
+            "interfaces": "Engine type (GmSSL, TencentSM, TjfocGM), ToEngineType"
+          }
+        ],
+        "relationships": "gredis uses github.com/gomodule/redigo/redis for Redis connection pooling; wal uses github.com/tidwall/tinylru for segment caching; alert uses httputils for HTTP POST; birdsnest uses github.com/linvon/cuckoo-filter; cert uses crypto/x509, crypto/asym, crypto/hash, github.com/tjfoc/gmsm/sm2; evmutils uses github.com/hyperledger/burrow for ABI, golang.org/x/crypto/sha3 for Keccak256; ca uses crypto/tls, crypto/x509 for TLS config; concurrentlru wraps github.com/golang/groupcache/lru; container uses reflect for DI; helper uses github.com/libp2p/go-libp2p-core/crypto and peer, github.com/multiformats/go-multiaddr; json wraps github.com/json-iterator/go; log uses go.uber.org/zap with file-rotatelogs; monitor uses github.com/prometheus/client_golang; msgbus is standalone with sync.Map; shardingbirdsnest extends birdsnest with parallel sharding"
+      }
+    },
+    {
+      "name": "chain-module/protocol",
+      "description": "Core interface definitions for ChainMaker blockchain platform. Defines abstract interfaces for all major subsystems enabling modular, pluggable architecture",
+      "interfaces": "All interfaces are exported for implementation by other modules",
+      "internal": {
+        "submodules": [
+          {
+            "name": "core_interface",
+            "description": "Block lifecycle interfaces: BlockCommitter (add block to ledger), BlockProposer (generate new blocks), BlockVerifier (validate blocks), CoreEngine (orchestrates block processing)",
+            "interfaces": "BlockCommitter.AddBlock, BlockProposer.Start/Stop/OnReceiveTxPoolSignal/OnReceiveProposeStatusChange, BlockVerifier.VerifyBlock/VerifyBlockSync/VerifyBlockWithRwSets, CoreEngine, StoreHelper"
+          },
+          {
+            "name": "consensus_interface",
+            "description": "Consensus engine interfaces for pluggable consensus (Solo, TBFT, Raft). Includes TBFT config keys and extend handler for DPoS",
+            "interfaces": "ConsensusEngine.Start/Stop, ConsensusState.GetValidators/GetLastHeight/GetConsensusStateJSON, ConsensusExtendEngine, ConsensusExtendHandler.CreateRWSet/VerifyConsensusArgs/GetValidators"
+          },
+          {
+            "name": "store_interface",
+            "description": "Storage interfaces for blockchain data: blocks, transactions, state DB, SQL operations, iterators. Supports both KV and SQL state storage modes",
+            "interfaces": "BlockchainStore (InitGenesis, PutBlock, GetBlock, GetTx, ReadObject, SelectObject, GetTxRWSet, GetHistoryForKey), DBHandle (Get, Put, Delete, WriteBatch, NewIteratorWithRange), SqlDBHandle, SqlDBTransaction, StateIterator, KeyHistoryIterator"
+          },
+          {
+            "name": "vm_interface",
+            "description": "Virtual machine interfaces for smart contract execution. Supports WASM and EVM runtimes with KV and SQL state access modes. Defines WACSI (WebAssembly ChainMaker System Interface)",
+            "interfaces": "VmManager.RunContract, RuntimeInstance.Invoke, TxSimContext (Get, Put, Del, Select, CallContract, GetTx, GetBlockHeight, SubtractGas), Wacsi (PutState, GetState, DeleteState, CallContract, EmitEvent, KvIterator, ExecuteQuery)"
+          },
+          {
+            "name": "tx_pool_interface",
+            "description": "Transaction pool interfaces for pending transaction management. Supports normal (single tx) and batch modes for different consensus algorithms",
+            "interfaces": "TxPool.Start/Stop/AddTx/FetchTxs/FetchTxBatches/GetTxsByTxIds/GetAllTxsByTxIds/RetryAndRemoveTxs/TxExists/GetPoolStatus; TxSource (RPC, P2P, INTERNAL)"
+          },
+          {
+            "name": "access_control_interface",
+            "description": "Access control and identity management interfaces. Supports permissioned (certificate/public key) authentication with role-based policies",
+            "interfaces": "AccessControlProvider.ValidateResourcePolicy/LookUpPolicy/CreatePrincipal/VerifyPrincipal/NewMember, Principal, Member.GetMemberId/GetOrgId/GetRole/Verify, SigningMember.Sign; Roles: ADMIN, CLIENT, CONSENSUS, COMMON; Rules: MAJORITY, ALL, ANY, SELF"
+          },
+          {
+            "name": "net_interface",
+            "description": "P2P networking interfaces based on libp2p. Supports direct messaging and pub-sub with chain-specific topics",
+            "interfaces": "Net.GetNodeUid/InitPubSub/BroadcastWithChainId/SubscribeWithChainId/SendMsg/DirectMsgHandle, NetService.BroadcastMsg/Subscribe/ConsensusBroadcastMsg/SendMsg, ChainNodesInfoProvider"
+          }
+        ],
+        "relationships": "All interfaces depend on chainmaker.org/chainmaker/pb-go/v2 for protobuf types. core_interface uses msgbus for cross-module communication. vm_interface defines TxSimContext which is central to tx execution. access_control_interface uses crypto for signing/verification."
+      }
+    }
+  ],
+  "relationships": "chain-module/utils provides standalone utility functions consumed by other ChainMaker modules for blockchain operations. chain-module/common provides foundational crypto, encoding utilities, Redis client, and WAL. chain-module/protocol defines all core interfaces that other modules implement. Dependencies: utils → common, protocol, pb-go; common → pb-go (some submodules); all implementation modules → protocol (for interfaces)."
+}

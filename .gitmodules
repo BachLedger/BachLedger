@@ -1,0 +1,75 @@
+[submodule "yzchain-go"]
+	path = yzchain-go
+	url = https://github.com/BachLedger/yzchain-go.git
+[submodule "yzchain-cryptogen"]
+	path = yzchain-cryptogen
+	url = https://github.com/BachLedger/yzchain-cryptogen.git
+[submodule "chain-module/chainconf"]
+	path = chain-module/chainconf
+	url = https://github.com/BachLedger/chainconf.git
+[submodule "chain-module/common"]
+	path = chain-module/common
+	url = https://github.com/BachLedger/common.git
+[submodule "chain-module/consensus-raft"]
+	path = chain-module/consensus-raft
+	url = https://github.com/BachLedger/consensus-raft.git
+[submodule "chain-module/consensus-solo"]
+	path = chain-module/consensus-solo
+	url = https://github.com/BachLedger/consensus-solo.git
+[submodule "chain-module/consensus-tbft"]
+	path = chain-module/consensus-tbft
+	url = https://github.com/BachLedger/consensus-tbft.git
+[submodule "chain-module/consensus-utils"]
+	path = chain-module/consensus-utils
+	url = https://github.com/BachLedger/consensus-utils.git
+[submodule "chain-module/localconf"]
+	path = chain-module/localconf
+	url = https://github.com/BachLedger/localconf.git
+[submodule "chain-module/logger"]
+	path = chain-module/logger
+	url = https://github.com/BachLedger/logger.git
+[submodule "chain-module/net-common"]
+	path = chain-module/net-common
+	url = https://github.com/BachLedger/net-common.git
+[submodule "chain-module/net-libp2p"]
+	path = chain-module/net-libp2p
+	url = https://github.com/BachLedger/net-libp2p.git
+[submodule "chain-module/pb"]
+	path = chain-module/pb
+	url = https://github.com/BachLedger/pb.git
+[submodule "chain-module/pb-go"]
+	path = chain-module/pb-go
+	url = https://github.com/BachLedger/pb-go.git
+[submodule "chain-module/protocol"]
+	path = chain-module/protocol
+	url = https://github.com/BachLedger/protocol.git
+[submodule "chain-module/sdk-go"]
+	path = chain-module/sdk-go
+	url = https://github.com/BachLedger/sdk-go.git
+[submodule "chain-module/store"]
+	path = chain-module/store
+	url = https://github.com/BachLedger/store.git
+[submodule "chain-module/txpool-batch"]
+	path = chain-module/txpool-batch
+	url = https://github.com/BachLedger/txpool-batch.git
+[submodule "chain-module/txpool-normal"]
+	path = chain-module/txpool-normal
+	url = https://github.com/BachLedger/txpool-normal.git
+[submodule "chain-module/utils"]
+	path = chain-module/utils
+	url = https://github.com/BachLedger/utils.git
+[submodule "chain-module/vm"]
+	path = chain-module/vm
+	url = https://github.com/BachLedger/vm.git
+[submodule "chain-module/vm-engine"]
+	path = chain-module/vm-engine
+	url = https://github.com/BachLedger/vm-engine.git
+[submodule "chain-module/vm-evm"]
+	path = chain-module/vm-evm
+	url = https://github.com/BachLedger/vm-evm.git
+[submodule "chain-module/vm-native"]
+	path = chain-module/vm-native
+	url = https://github.com/BachLedger/vm-native.git
+[submodule "chain-module/ExpScript-Data"]
+	path = chain-module/ExpScript-Data
+	url = https://github.com/BachLedger/ExpScript-Data.git

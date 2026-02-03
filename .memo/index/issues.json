@@ -1,0 +1,355 @@
+{
+  "issues": [
+    {
+      "tags": ["design-decision"],
+      "title": "Version-aware gas calculation starting from v2.3.2",
+      "description": "Gas calculation for WASM syscalls is only applied for block versions >= 2030200 (v2.3.2). Earlier versions return nil immediately without charging gas. This maintains backward compatibility while enabling gas metering for newer chains.",
+      "locations": [
+        {
+          "file": "chain-module/utils/gas/wasm/gas_wasm_all.go",
+          "keyword": "blockVersion232",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Special version mapping for compatibility",
+      "description": "Block version calculation has special cases: v2.2.0_alpha maps to 220, v2.2.0 maps to 2201. From v2.3.1 onwards, uses 2-digit per version component (e.g., v2.3.1 = 2030100). This handles migration from old versioning scheme to new standardized format.",
+      "locations": [
+        {
+          "file": "chain-module/utils/genesis.go",
+          "keyword": "specialVersionMapping",
+          "line": 157
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Address anti-collision for contract names",
+      "description": "For block versions >= 2300, contract name addresses apply hash (Keccak256 or SM3 depending on address type) before address generation to prevent collision attacks where malicious names could map to existing contract addresses.",
+      "locations": [
+        {
+          "file": "chain-module/utils/address.go",
+          "keyword": "antiCollision",
+          "line": 55
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Thread-safe singleton cache per chain",
+      "description": "CacheList uses double-checked locking pattern with sync.Mutex to ensure only one cache instance per name (typically chainId). Internal storage uses sync.Map for concurrent access without additional locking on Put/Delete/Exists operations.",
+      "locations": [
+        {
+          "file": "chain-module/utils/cache/black_list.go",
+          "keyword": "cacheInstance",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Block hash excludes Signature and BlockHash fields",
+      "description": "When calculating block hash, the header's Signature and BlockHash fields are set to nil before marshaling. This allows the hash to be computed before signing and stored in BlockHash field, while signature is added separately.",
+      "locations": [
+        {
+          "file": "chain-module/utils/block.go",
+          "keyword": "header.Signature = nil",
+          "line": 107
+        }
+      ]
+    },
+    {
+      "tags": ["compromise", "mock"],
+      "title": "Member.GetMemberPubKeySA returns hardcoded values",
+      "description": "GetMemberPubKeySA in member.go returns hardcoded ([]byte('pubkey'), memberType) instead of actual public key. The commented code suggests it should return actual public key and signature algorithm. This appears to be placeholder implementation.",
+      "locations": [
+        {
+          "file": "chain-module/utils/member.go",
+          "keyword": "GetMemberPubKeySA",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "SQL parsing uses TiDB parser for MySQL compatibility",
+      "description": "GetSqlTableName uses github.com/pingcap/parser (TiDB's SQL parser) to extract table names from SQL statements. This provides MySQL-compatible SQL parsing for the blockchain's SQL database support.",
+      "locations": [
+        {
+          "file": "chain-module/utils/sql_parse.go",
+          "keyword": "parser.New()",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Genesis block uses fixed default timestamp",
+      "description": "Genesis block always uses timestamp 1606669261 (2020-11-30 00:00:00) regardless of actual creation time. This ensures deterministic genesis block hash across all nodes initializing the same chain.",
+      "locations": [
+        {
+          "file": "chain-module/utils/genesis.go",
+          "keyword": "defaultTimestamp",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "TRANSACTION_MANAGER introduced in v2.3.1.2",
+      "description": "The TRANSACTION_MANAGER system contract is only initialized in genesis for block versions >= v2.3.1.2 (2030102). Earlier versions do not include this contract in their genesis read-write set.",
+      "locations": [
+        {
+          "file": "chain-module/utils/genesis.go",
+          "keyword": "TRANSACTION_MANAGER",
+          "line": 272
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Contract address written twice starting from v2.3.0",
+      "description": "From v2.3.0 onwards, system contracts are written to genesis RW set twice: once by name key and once by address key. This supports both name-based and address-based contract lookups.",
+      "locations": [
+        {
+          "file": "chain-module/utils/genesis.go",
+          "keyword": "addrWrite",
+          "line": 279
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Golangci-lint configuration for chain-module/common",
+      "description": "Code quality enforced via golangci-lint with strict settings: max cyclomatic complexity 20, max line length 120, max function length 80 lines. Enabled linters include gosec (security), errcheck, staticcheck, govet, revive. Test files are exempt from some checks (unused, deadcode, errcheck, lll). Skips 'tls' and 'burley' directories.",
+      "locations": [
+        {
+          "file": "chain-module/common/.golangci.yml",
+          "keyword": "linters:",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "fork"],
+      "title": "WAL forked from tidwall/wal v0.1.4 with CRC32 checksum",
+      "description": "Write-Ahead Log is based on github.com/tidwall/wal v0.1.4 (MIT License, Joshua J Baker). Custom modifications add CRC32 Castagnoli checksums to each log entry for data integrity verification. All customizations marked with '// Customize part start/end' comments.",
+      "locations": [
+        {
+          "file": "chain-module/common/wal/修改说明.md",
+          "keyword": "v0.1.4",
+          "line": 1
+        },
+        {
+          "file": "chain-module/common/wal/crc32.go",
+          "keyword": "crc32.Castagnoli",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "WAL discards corrupted entries on restart",
+      "description": "When WAL restarts, loadSegmentEntriesForRestarting verifies CRC32 checksum for each entry. Entries with checksum mismatch (corruption) are silently discarded rather than causing errors. This provides crash recovery tolerance at the cost of potentially losing corrupted data.",
+      "locations": [
+        {
+          "file": "chain-module/common/wal/wal.go",
+          "keyword": "loadSegmentEntriesForRestarting",
+          "line": 335
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "BirdsNest uses Cuckoo Filter clusters for transaction deduplication",
+      "description": "Transaction filter uses multiple Cuckoo Filters in a 'Bird's Nest' structure. When current filter becomes full (84-98% load factor depending on tags_per_bucket), a rotation strategy moves to next filter. This provides space-efficient probabilistic duplicate detection with configurable false positive rate via bits_per_item.",
+      "locations": [
+        {
+          "file": "chain-module/common/birdsnest/birdsnest.go",
+          "keyword": "fullStrategy",
+          "line": 175
+        },
+        {
+          "file": "chain-module/common/birdsnest/cuckoo.go",
+          "keyword": "loadFactorMap",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Zero-copy string/bytes conversion uses unsafe pointers",
+      "description": "bytehelper.StringToBytes and BytesToString use unsafe.Pointer to convert between string and []byte without memory allocation. This is safe as long as the underlying data is not modified, but requires careful usage to avoid data races.",
+      "locations": [
+        {
+          "file": "chain-module/common/bytehelper/bytes.go",
+          "keyword": "unsafe.Pointer",
+          "line": 98
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Certificate NotBefore backdated by 10 minutes for clock skew tolerance",
+      "description": "When creating certificates, NotBefore is set to time.Now().Add(-10 * time.Minute) to handle clock skew between certificate issuer and verifiers. This prevents 'certificate not yet valid' errors when clocks are slightly out of sync.",
+      "locations": [
+        {
+          "file": "chain-module/common/cert/cert.go",
+          "keyword": "notBefore := time.Now().Add(-10 * time.Minute)",
+          "line": 237
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Auto-select signature algorithm based on key type",
+      "description": "Certificate signature algorithm is automatically determined from private key type: RSA→SHA256WithRSA, SM2→SM3WithSM2, ECDSA→ECDSAWithSHA256 (default). This ensures cryptographic consistency between key and signature.",
+      "locations": [
+        {
+          "file": "chain-module/common/cert/cert.go",
+          "keyword": "getSignatureAlgorithm",
+          "line": 576
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "performance"],
+      "title": "Sorted maps use lazy sorting with atomic flag",
+      "description": "SortedMap implementations defer sorting until actually needed (Range or Remove operations). Uses atomic uint32 needResort flag with double-checked locking pattern to minimize sorting overhead. Keys are only re-sorted when new keys are added, not on every operation.",
+      "locations": [
+        {
+          "file": "chain-module/common/sortedmap/sorted_map.go",
+          "keyword": "needResort",
+          "line": 107
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "EasyCodec uses deterministic serialization with sorted keys",
+      "description": "When creating EasyCodec from map, keys are sorted alphabetically before serialization (ParamsMapToEasyCodecItem calls sort.Strings). This ensures identical maps produce identical binary output, which is critical for blockchain consensus where all nodes must compute the same hash.",
+      "locations": [
+        {
+          "file": "chain-module/common/serialize/easycodec.go",
+          "keyword": "sort.Strings(keys)",
+          "line": 215
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "EasyCodec supports both header and headerless formats",
+      "description": "EasyUnmarshal auto-detects whether data starts with 'cmec' magic number. If present, expects full header (magic+version+reserved). If not, treats first 4 bytes as item count directly. Marshal currently outputs headerless format (header lines commented out at line 290-292).",
+      "locations": [
+        {
+          "file": "chain-module/common/serialize/easycodec.go",
+          "keyword": "bytes.Equal(magicNum, ecMagicNum)",
+          "line": 352
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "fork"],
+      "title": "EVM utilities based on SealEVM and Hyperledger Burrow",
+      "description": "evmutils Int256 implementation is based on SealEVM (Apache 2.0). ABI encoding/decoding uses a fork of Hyperledger Burrow's ABI package. This provides Ethereum-compatible 256-bit arithmetic and Solidity ABI support for ChainMaker's EVM execution.",
+      "locations": [
+        {
+          "file": "chain-module/common/evmutils/evmInt256.go",
+          "keyword": "SealEVM",
+          "line": 2
+        },
+        {
+          "file": "chain-module/common/evmutils/abi/burrow/abi/abi.go",
+          "keyword": "hyperledger/burrow",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "ZXL address format uses SM3 hash with ZX prefix",
+      "description": "Zhi Xin Lian (ZXL) addresses use format: 'ZX' + hex(SM3(public_key_bytes)[:20]). This is a 22-character format distinct from Ethereum's 40-char hex addresses. Supports SM2, ECDSA, and RSA public keys via different marshaling.",
+      "locations": [
+        {
+          "file": "chain-module/common/evmutils/zxltools.go",
+          "keyword": "ZXAddrPrefix",
+          "line": 33
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "EVM ABI packs all values to 32-byte elements",
+      "description": "Following Solidity ABI specification, all primitive types (bool, uint, int, address, bytes1-32) are padded to 32 bytes (ElementSize). Dynamic types (string, bytes, arrays) store offset in fixed section and data in dynamic section. Function selectors are 4 bytes of Keccak256(signature).",
+      "locations": [
+        {
+          "file": "chain-module/common/evmutils/abi/burrow/abi/primitives.go",
+          "keyword": "ElementSize = 32",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "GMTLS 1.1 double-certificate mode for Chinese crypto",
+      "description": "CA module supports GMTLS 1.1 with separate signing and encryption certificates (both using SM2). If encCertPath/encKeyPath files exist, automatically uses double-cert mode with GMSupport enabled. This is required for compliance with Chinese cryptographic standards.",
+      "locations": [
+        {
+          "file": "chain-module/common/ca/tls.go",
+          "keyword": "getGMTlsConfig",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "IoC container supports singleton and transient lifestyles",
+      "description": "Container bindings default to singleton (instance cached after first resolve). Use Lifestyle(true) option to make transient (new instance per resolve). Supports named bindings, optional dependencies, and struct field injection via 'optional' and 'name' tags.",
+      "locations": [
+        {
+          "file": "chain-module/common/container/container.go",
+          "keyword": "isTransient",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Message bus uses per-topic channels with 10240 buffer",
+      "description": "Each topic gets its own buffered channel (defaultMessageBufferSize=10240) for message delivery. Publish() is async (goroutine per subscriber), PublishSafe() ensures ordering via single safe channel, PublishSync() blocks until all subscribers complete.",
+      "locations": [
+        {
+          "file": "chain-module/common/msgbus/message_bus.go",
+          "keyword": "defaultMessageBufferSize = 10240",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Sharding bird's nest distributes keys for parallel filtering",
+      "description": "ShardingBirdsNest distributes transaction keys across multiple BirdsNest instances using a sharding algorithm (typically key modulo). Adds() processes shards in parallel with configurable timeout. Each shard is independent and can be persisted separately.",
+      "locations": [
+        {
+          "file": "chain-module/common/shardingbirdsnest/sharding_birdnest.go",
+          "keyword": "DoSharding",
+          "line": 129
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "JSON-RPC error codes follow standard with blockchain extensions",
+      "description": "Errors module uses standard JSON-RPC error codes (-32768 to -32000 reserved) plus blockchain-specific codes: txpool errors (-31100 to -31117), core errors (-31200 to -31203), sync errors (-33000 to -33001), store errors (-34000+).",
+      "locations": [
+        {
+          "file": "chain-module/common/errors/json_errors.go",
+          "keyword": "ErrParseError",
+          "line": 20
+        }
+      ]
+    }
+  ]
+}
