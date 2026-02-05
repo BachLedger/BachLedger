@@ -4,7 +4,9 @@
   <img src="assets/bach.jpg" alt="Johann Sebastian Bach" width="180">
 </p>
 
-**BachLedger** is a high-performance blockchain system that orchestrates parallel transaction execution with dynamic dependency detection and seamless scheduling.
+**BachLedger** is named after [Johann Sebastian Bach](https://en.wikipedia.org/wiki/Johann_Sebastian_Bach), the legendary composer renowned for his mastery of polyphony — the art of weaving multiple independent musical voices into a harmonious whole. Just as Bach orchestrated complex fugues where each voice moves independently yet contributes to a unified composition, BachLedger orchestrates parallel transaction execution where multiple transactions run concurrently while maintaining blockchain consistency.
+
+BachLedger is a high-performance blockchain system that achieves this through dynamic dependency detection and seamless scheduling.
 
 ## Paper
 
