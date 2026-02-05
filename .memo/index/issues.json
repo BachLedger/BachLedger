@@ -350,6 +350,163 @@
           "line": 20
         }
       ]
+    },
+    {
+      "tags": ["todo"],
+      "title": "ShardingBirdsNest should use context.Context for goroutine lifecycle",
+      "description": "Currently uses exitC channel for goroutine shutdown signaling. Should be refactored to use context.Context for proper cancellation propagation and cleaner goroutine management in serializeMonitor, serializeTimed, and Start methods.",
+      "locations": [
+        {
+          "file": "chain-module/common/shardingbirdsnest/serialize.go",
+          "keyword": "TODO Goroutinue should be turned off using context.Context",
+          "line": 20
+        },
+        {
+          "file": "chain-module/common/shardingbirdsnest/sharding_birdnest.go",
+          "keyword": "TODO exit -> context.Context",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Sharding algorithm uses last byte modulo for key distribution",
+      "description": "ChecksumKeyModulo takes the last byte of the key and computes modulo with shard count. This provides simple but effective distribution for timestamp-based transaction keys. Trade-off: distribution uniformity depends on key entropy in last byte.",
+      "locations": [
+        {
+          "file": "chain-module/common/shardingbirdsnest/sharding_algorithm.go",
+          "keyword": "ChecksumKeyModulo",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Native contracts support version-aware routing for backward compatibility",
+      "description": "RuntimeInstance routes contract invocations to different implementations based on block version: v210 (version 20-220) for DPoS/contractmgr, v220 (version 220-2300) for certmgr/chainconfigmgr/accountmgr, v230 (2300-2312) for chainconfigmgr2310. This allows seamless upgrades while maintaining backward compatibility with older blocks.",
+      "locations": [
+        {
+          "file": "chain-module/vm-native/native.go",
+          "keyword": "getContractFunc",
+          "line": 284
+        }
+      ]
+    },
+    {
+      "tags": ["todo"],
+      "title": "Remove legacy IsNativeTxType function",
+      "description": "config.go contains TODO to remove IsNativeTxType function (marked by 'TODO: Devin: Remove it'). Function currently checks if TxType is QUERY_CONTRACT or INVOKE_CONTRACT.",
+      "locations": [
+        {
+          "file": "chain-module/vm-native/config.go",
+          "keyword": "TODO: Devin: Remove it",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "tags": ["todo"],
+      "title": "GetNodeChainList misplaced in block_contract",
+      "description": "GetNodeChainList function in blockcontract may not belong there. TODO comment questions its relationship to Block. Consider moving to appropriate contract module.",
+      "locations": [
+        {
+          "file": "chain-module/vm-native/blockcontract/block_contract.go",
+          "keyword": "GetNodeChainList",
+          "line": 339
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Transaction blacklist uses msgbus for cache synchronization",
+      "description": "RuntimeInstance subscribes to msgbus.BlacklistTxIdAdd/Del topics to maintain in-memory blacklist cache (utils/cache.CacheList). This ensures all nodes have synchronized blacklist state. Blacklist is persisted via TRANSACTION_MANAGER system contract with 'blacklistTxIds@' key prefix.",
+      "locations": [
+        {
+          "file": "chain-module/vm-native/native.go",
+          "keyword": "msgbus.BlacklistTxIdAdd",
+          "line": 74
+        },
+        {
+          "file": "chain-module/vm-native/transactionmgr/transaction.go",
+          "keyword": "KeyPrefix",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "TBFT WAL configured with 64MB segments and 3 file limit",
+      "description": "InitLWS initializes the Write-Ahead Log (LWS) with hardcoded parameters: 64MB segment size (1<<26 bytes) and max 3 files for purging. WAL directory is {StorePath}/{chainId}/wal_{nodeId}. WAL write mode is configurable via ConsensusConfig.ExtConfig with key 'WAL_WRITE_MODE'.",
+      "locations": [
+        {
+          "file": "chain-module/consensus-tbft/utils.go",
+          "keyword": "WithSegmentSize",
+          "line": 264
+        }
+      ]
+    },
+    {
+      "tags": ["bug"],
+      "title": "Chain ID mismatches in multi-chain test configuration",
+      "description": "In four_node_three_chain_persistent test, yzchain.yml declares 3 chains (chain1, chain2, chain3) mapped to config files (bc1.yml, bc2.yml, bc3.yml), but the actual chain_id values in the config files don't match: bc1.yml has chain_id=chain1 (correct), bc2.yml has chain_id=chain3 (should be chain2), bc3.yml has chain_id=chain1 (should be chain3). Additionally, bc1.yml and bc3.yml are identical files. This configuration error may cause chain2 to fail initialization or chains to conflict.",
+      "locations": [
+        {
+          "file": "chain-module/consensus-tbft/testdata/four_node_three_chain_persistent/yz-org1/chainconfig/bc2.yml",
+          "keyword": "chain_id: chain3",
+          "line": 1
+        },
+        {
+          "file": "chain-module/consensus-tbft/testdata/four_node_three_chain_persistent/yz-org1/chainconfig/bc3.yml",
+          "keyword": "chain_id: chain1",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "tags": ["compromise", "design-decision"],
+      "title": "Single-node TBFT defeats purpose of Byzantine consensus",
+      "description": "The one_node test configuration runs TBFT consensus engine with only 1 validator, which completely defeats the purpose of Byzantine fault tolerance. With n=1, there is no consensus voting, no fault tolerance (f=0), and no Byzantine resistance whatsoever - it's essentially solo mode using TBFT engine. The single node trivially achieves quorum with itself (1/1=100%), making all proposals instantly final without any validation from peers. Any crash or malicious behavior of this single node halts the network permanently with no recovery possible. This configuration exists purely for rapid development iteration, TBFT engine smoke testing, or educational purposes without network complexity. ChainMaker provides proper SOLO consensus (type=0) for legitimate single-node use cases. Never use single-node TBFT in any production or serious testing scenario - it provides none of the safety, liveness, or Byzantine resistance guarantees that TBFT is designed for.",
+      "locations": [
+        {
+          "file": "chain-module/consensus-tbft/testdata/one_node/yz-org1/chainconfig/bc1.yml",
+          "keyword": "consensus:",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "tags": ["compromise", "design-decision"],
+      "title": "Two-node TBFT lacks Byzantine fault tolerance",
+      "description": "The two_node test configuration runs TBFT with only 2 validators, which provides zero Byzantine fault tolerance (f=0). Byzantine consensus requires n >= 3f+1 nodes to tolerate f failures; with n=2, the formula gives f=0 (since 3*1+1=4 > 2). This means the network cannot tolerate ANY node crash or Byzantine behavior - both nodes must be operational and honest for consensus to proceed. The >2/3 quorum requirement means both nodes must agree (2/2=100%). This configuration is suitable only for development/testing where full BFT isn't needed, essentially providing crash fault tolerance (CFT) rather than Byzantine fault tolerance (BFT). Production deployments should use minimum 4 nodes (f=1) or ideally 7+ nodes (f=2) for meaningful Byzantine resilience.",
+      "locations": [
+        {
+          "file": "chain-module/consensus-tbft/testdata/two_node/yz-org1/chainconfig/bc1.yml",
+          "keyword": "consensus:",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "tags": ["compromise", "todo"],
+      "title": "Kubernetes deployment has environment-specific hardcoded values",
+      "description": "The four_node_k8s test deployment contains several environment-specific hardcoded values that must be updated for different Kubernetes clusters: (1) Container image registry address '172.21.16.17:5000/yzchain' is a private registry specific to the test environment - needs to be parameterized or documented for users to update, (2) Node affinity hostnames (vm-16-17-centos, vm-16-5-centos, vm-16-6-centos, vm-16-8-centos) pin pods to specific physical hosts - these won't exist in other clusters and should either be removed for flexibility or made configurable, (3) Fixed ClusterIP addresses (10.96.1.1-4) for P2P services might conflict with existing services in some clusters - consider using dynamic ClusterIP assignment or documenting the requirement, (4) NodePort ranges (301XX-304XX) might conflict with other services - should be documented as requirements. For production use, these values should be externalized to Helm values or kustomize overlays. Consider adding a configuration template or documentation explaining which values need customization per environment.",
+      "locations": [
+        {
+          "file": "chain-module/consensus-tbft/testdata/four_node_k8s/deployment.yaml",
+          "keyword": "172.21.16.17:5000",
+          "line": 21
+        },
+        {
+          "file": "chain-module/consensus-tbft/testdata/four_node_k8s/deployment.yaml",
+          "keyword": "nodeSelector:",
+          "line": 46
+        },
+        {
+          "file": "chain-module/consensus-tbft/testdata/four_node_k8s/deployment.yaml",
+          "keyword": "clusterIP: 10.96.1.1",
+          "line": 83
+        }
+      ]
     }
   ]
 }

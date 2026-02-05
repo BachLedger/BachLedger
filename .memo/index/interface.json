@@ -486,6 +486,36 @@
       "name": "protocol.ConsensusEngine interface",
       "params": "Start() error; Stop() error",
       "description": "Abstract consensus engine interface. Implementations: Solo (single node), TBFT (Tendermint BFT), Raft"
+    },
+    {
+      "type": "callback",
+      "name": "errors.Error interface",
+      "params": "Error() string; ErrorCode() int",
+      "description": "Base error interface for ChainMaker errors with error message and numeric error code"
+    },
+    {
+      "type": "callback",
+      "name": "errors.ErrCode type",
+      "params": "int32 with String() string and Int() int32 methods",
+      "description": "System error codes (1001+) with bilingual messages (EN/CN). Categories: system contract (1001-1006), payload validation (1007-1011), tx operations (1012-1013), getters (1014-1019), vm/txtype (1020-1021)"
+    },
+    {
+      "type": "callback",
+      "name": "errors.JsonError struct",
+      "params": "Code int, Message string, Data interface{}; implements Error interface with Error(), ErrorCode(), String() methods",
+      "description": "JSON-RPC compatible error struct. Standard codes (-32700 to -32603), txpool (-31100 to -31117), core (-31200 to -31203), sync (-33000 to -33001), store (-34000+)"
+    },
+    {
+      "type": "callback",
+      "name": "consensus-tbft.GetValidatorList(chainConfig *config.ChainConfig, store protocol.BlockchainStore) ([]string, error)",
+      "params": "chainConfig: chain configuration; store: blockchain store",
+      "description": "Extracts validator node IDs from chain config consensus.nodes. Used by TBFT consensus to build validatorSet"
+    },
+    {
+      "type": "callback",
+      "name": "consensus-tbft.VerifyBlockSignatures(chainConf protocol.ChainConf, ac protocol.AccessControlProvider, block *common.Block, store protocol.BlockchainStore, validatorListFunc consensus_utils.ValidatorListFunc) error",
+      "params": "chainConf: chain config provider; ac: access control for signature verification; block: block to verify; store: blockchain store; validatorListFunc: function to get validator list",
+      "description": "Verifies block has valid TBFT consensus VoteSet with 2/3+ majority signatures. Validates VoteSet hash matches block hash and all vote signatures are valid. Returns error if verification fails"
     }
   ]
 }

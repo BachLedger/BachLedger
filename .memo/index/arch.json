@@ -163,8 +163,8 @@
           },
           {
             "name": "shardingbirdsnest",
-            "description": "Sharded transaction duplicate filter distributing keys across multiple BirdsNest instances using configurable sharding algorithm (key modulo). Supports parallel adds with timeout",
-            "interfaces": "NewShardingBirdsNest, ShardingBirdsNest.Add, Adds, AddsAndSetHeight, Contains, ValidateRule, GetHeight, SetHeight, Info, Infos; ShardingAlgorithm interface: DoSharding, DoShardingOnce"
+            "description": "Sharded transaction duplicate filter distributing keys across multiple BirdsNest instances using configurable sharding algorithm (last-byte modulo). Supports parallel adds with timeout, WAL-based snapshot persistence with timed/height-based/exit triggers",
+            "interfaces": "NewShardingBirdsNest, ShardingBirdsNest.Add, Adds, AddsAndSetHeight, Contains, ValidateRule, GetHeight, SetHeight, Info, Infos, Start, Serialize, Deserialize; ShardingAlgorithm interface: DoSharding, DoShardingOnce"
           },
           {
             "name": "crypto",
@@ -224,7 +224,407 @@
         ],
         "relationships": "All interfaces depend on chainmaker.org/chainmaker/pb-go/v2 for protobuf types. core_interface uses msgbus for cross-module communication. vm_interface defines TxSimContext which is central to tx execution. access_control_interface uses crypto for signing/verification."
       }
+    },
+    {
+      "name": "chain-module/vm-native",
+      "description": "Native system contract implementations for ChainMaker blockchain. Provides built-in contracts for chain configuration, certificate management, DPoS staking, account/gas management, and transaction blacklisting. Supports version-aware contract routing for backward compatibility (v210, v220, v230)",
+      "interfaces": "RuntimeInstance.Invoke; Contract interface: GetMethod; System contracts accessible via syscontract.SystemContract names",
+      "internal": {
+        "submodules": [
+          {
+            "name": "native (root)",
+            "description": "RuntimeInstance manages native contract registry, routes invocations with version-aware dispatch (block version 210/220/230+ routes to different contract implementations), listens to msgbus for blacklist and chain config updates",
+            "interfaces": "InitInstance, GetRuntimeInstance, RuntimeInstance.Invoke, IsNative, IsNativeContract, IsNativeTxType"
+          },
+          {
+            "name": "common",
+            "description": "Shared types, interfaces, and result builders for native contracts",
+            "interfaces": "Contract interface (GetMethod), ContractFunc type, ResultSuccess, ResultError, ResultJson, WrapResultFunc, WrapEventResult; Errors: ErrContractNotFound, ErrMethodNotFound, ErrParamsEmpty"
+          },
+          {
+            "name": "chainconfigmgr",
+            "description": "CHAIN_CONFIG system contract for chain configuration management: consensus settings, block parameters, trust roots, node management, gas settings, address type, permissions",
+            "interfaces": "ChainConfigContract methods: CORE_UPDATE, GET_CHAIN_CONFIG, TRUST_ROOT_ADD/UPDATE/DELETE, NODE_ID_ADD/UPDATE/DELETE, CONSENSUS_EXT_ADD/UPDATE/DELETE, PERMISSION_ADD/UPDATE/DELETE, etc."
+          },
+          {
+            "name": "accountmgr",
+            "description": "ACCOUNT_MANAGER system contract for gas account management: balance tracking, recharging, charging, freezing accounts",
+            "interfaces": "AccountManager methods: SET_ADMIN, GET_ADMIN, RECHARGE_GAS, CHARGE_GAS, GET_BALANCE, REFUND_GAS, FROZEN_ACCOUNT, UNFROZEN_ACCOUNT, ACCOUNT_STATUS"
+          },
+          {
+            "name": "dposmgr",
+            "description": "DPoS consensus contracts: DPOS_ERC20 for token operations (transfer, mint, balance), DPOS_STAKE for staking/delegation/validator management",
+            "interfaces": "DPoSERC20Contract: GET_BALANCEOF, TRANSFER, MINT, GET_OWNER, GET_DECIMALS, GET_TOTAL_SUPPLY; DPoSStakeContract: stake/unstake/delegate methods"
+          },
+          {
+            "name": "certmgr",
+            "description": "CERT_MANAGE system contract for certificate hash management and certificate alias features. Supports CRL (Certificate Revocation List)",
+            "interfaces": "CertManageContract methods: CERTS_FREEZE/UNFREEZE/REVOKE/DELETE, CERT_ALIAS_ADD/UPDATE/DELETE/QUERY"
+          },
+          {
+            "name": "contractmgr",
+            "description": "CONTRACT_MANAGE system contract for user contract deployment access control and verification",
+            "interfaces": "ContractManager: VERIFY_CONTRACT_ACCESS, access control for contract deployment"
+          },
+          {
+            "name": "transactionmgr",
+            "description": "TRANSACTION_MANAGER system contract for transaction ID blacklist management. Blacklisted TxIds are cached in memory and persisted to state DB",
+            "interfaces": "TransactionMgrContract: ADD_BLACKLIST_TX_IDS, DELETE_BLACKLIST_TX_IDS, GET_BLACKLIST_TX_IDS; KeyPrefix 'blacklistTxIds@'"
+          },
+          {
+            "name": "blockcontract",
+            "description": "CHAIN_QUERY system contract for querying block and transaction data",
+            "interfaces": "BlockContract: GET_BLOCK_BY_HEIGHT, GET_BLOCK_BY_HASH, GET_TX_BY_TX_ID, etc."
+          },
+          {
+            "name": "government",
+            "description": "GOVERNANCE system contract for on-chain governance",
+            "interfaces": "GovernmentContract governance methods"
+          },
+          {
+            "name": "pubkeymgr",
+            "description": "PUBKEY_MANAGE system contract for public key management in public/permissionless mode",
+            "interfaces": "PubkeyManageContract: pubkey registration and management"
+          },
+          {
+            "name": "v210, v220, v230",
+            "description": "Versioned contract implementations for backward compatibility. RuntimeInstance routes to these based on block version: v210 for DPoS/contractmgr, v220 for certmgr/chainconfigmgr/accountmgr, v230 for chainconfigmgr2310",
+            "interfaces": "Same interfaces as main contracts but with version-specific implementations"
+          }
+        ],
+        "relationships": "All contracts depend on protocol.TxSimContext for state access. chainconfigmgr uses chainconf for validation. accountmgr/dposmgr use utils for address generation. RuntimeInstance subscribes to msgbus for BlacklistTxIdAdd/Del and ChainConfig updates."
+      }
+    },
+    {
+      "name": "chain-module/logger",
+      "description": "Logging module for ChainMaker blockchain nodes. Wraps uber-go/zap with per-module and per-chain logging, dynamic log level refresh, file rotation, Kafka output support, and colored console output",
+      "interfaces": "GetLogger, GetLoggerByChain, SetLogConfig, RefreshLogConfig; CMLogger: Debug/Info/Warn/Error/Fatal/Panic (with f/w variants), DebugDynamic, InfoDynamic, Close",
+      "internal": {
+        "submodules": [
+          {
+            "name": "logger (root)",
+            "description": "CMLogger wraps zap.SugaredLogger with module-aware configuration. Supports per-chain log files (LogByChain), JSON format, colored output, stack traces at configurable level. Dynamic log methods (DebugDynamic, InfoDynamic) avoid evaluation overhead when level is disabled. Module constants: MODULE_BLOCKCHAIN, MODULE_NET, MODULE_STORAGE, MODULE_CONSENSUS, MODULE_TXPOOL, MODULE_CORE, MODULE_VM, MODULE_RPC, etc.",
+            "interfaces": "GetLogger, GetLoggerByChain, SetLogConfig, RefreshLogConfig, DefaultLogConfig, CMLogger methods"
+          },
+          {
+            "name": "kafka_logger",
+            "description": "KafkaLogger implements io.Writer for sending logs to Kafka. Uses Shopify/sarama producer with configurable topic mapping per chain, SASL authentication, compression",
+            "interfaces": "NewKafkaProducer, KafkaLogger.Write"
+          },
+          {
+            "name": "types",
+            "description": "Configuration types: LogConfig (system/brief/event/module logs), LogNodeConfig (level, path, rotation, console, JSON, Kafka), KafkaLogConfig (servers, topics, SASL), KafkaSaslConfig",
+            "interfaces": "LogConfig, LogNodeConfig.GetFilePath, KafkaLogConfig.GetTopic"
+          }
+        ],
+        "relationships": "Uses chainmaker.org/chainmaker/common/v2/log for InitSugarLogger and log levels. Uses github.com/Shopify/sarama for Kafka producer. Loggers are cached in sync.Map (cmLoggers) keyed by module+chainId."
+      }
+    },
+    {
+      "name": "chain-module/localconf",
+      "description": "Local node configuration management for ChainMaker blockchain. Uses spf13/viper for YAML config parsing with cobra CLI integration. Supports dynamic blockchain addition/deletion, log level refresh, and debug mode configuration",
+      "interfaces": "InitLocalConfig, CheckNewCmBlockChainConfig, RefreshLogLevelsConfig, UpdateDebugConfig; Global vars: ChainMakerConfig, FindNewBlockChainNotifyC, FindDeleteBlockChainNotifyC",
+      "internal": {
+        "submodules": [
+          {
+            "name": "config (root)",
+            "description": "Configuration initialization from YAML files with viper. Supports merging log config from separate file. Provides channels for notifying blockchain addition/deletion. RefreshLogLevelsConfig allows runtime log level changes",
+            "interfaces": "InitLocalConfig, CheckNewCmBlockChainConfig, RefreshLogLevelsConfig, UpdateDebugConfig, CMConfig.PrettyJson, CMConfig.SetNodeId, CMConfig.Deal"
+          },
+          {
+            "name": "types",
+            "description": "Configuration struct types: CMConfig (root), nodeConfig (identity/certs/PKCS11), netConfig (P2P/TLS/blacklist/STUN), rpcConfig (gRPC/rate-limit/gateway), syncConfig, vmConfig, ConsensusConfig (raft/tbft), coreConfig, TxFilterConfig (birds-nest/sharding), debugConfig (test flags)",
+            "interfaces": "CMConfig, nodeConfig, netConfig, rpcConfig, syncConfig, vmConfig, ConsensusConfig, coreConfig, TxFilterConfig, BirdsNestConfig, ShardingBirdsNestConfig, debugConfig"
+          }
+        ],
+        "relationships": "Uses spf13/viper for config parsing, spf13/cobra for CLI flags. Uses logger/v2 for SetLogConfig. Uses go-prettyjson for config display. ConfigFilepath defaults to './yzchain.yml'."
+      }
+    },
+    {
+      "name": "chain-module/txpool-batch",
+      "description": "Batch transaction pool implementation for ChainMaker. Implements protocol.TxPool interface with batch-based transaction processing for improved throughput. Supports WAL persistence, batch creation with timeout, transaction forwarding, and batch recovery for consensus",
+      "interfaces": "NewBatchTxPool; implements protocol.TxPool: Start, Stop, AddTx, FetchTxs, FetchTxBatches, GetTxsByTxIds, RetryAndRemoveTxs, TxExists, GetPoolStatus",
+      "internal": {
+        "submodules": [
+          {
+            "name": "batch_tx_pool (root)",
+            "description": "batchTxPool main implementation. Groups transactions into TxBatch with unique batchId (timestamp+nodeId+hash). Uses timer-based batch creation (default 50ms). Subscribes to msgbus for RecvTxPoolMsg. Forwards transactions to proposer nodes based on ForwardMod configuration",
+            "interfaces": "NewBatchTxPool, batchTxPool.Start/Stop/AddTx/FetchTxs/FetchTxBatches/GetTxsByTxIds/RetryAndRemoveTxs/TxExists/GetPoolStatus/OnMessage/OnQuit"
+          },
+          {
+            "name": "batch_queue",
+            "description": "batchQueue manages config batch queue (single) and common batch queues (per-node). Config batches have priority. Common batches are partitioned by nodeId for fair scheduling. Uses batchList internally",
+            "interfaces": "newBatchQueue, addConfigTxBatch, addCommonTxBatch, addCommonTxBatchToPending, FetchTxBatch, GetPoolStatus"
+          },
+          {
+            "name": "batch_list",
+            "description": "batchList stores batches in queue (ready for block) and pendingCache (packed but not committed). Supports batch validation, pruning expired batches, and WAL dump/replay",
+            "interfaces": "newBatchList, PutTxBatch, PutTxBatchToPendingCache, GetTxBatch, RemoveTxBatch, HasTxBatch"
+          },
+          {
+            "name": "batch_recover",
+            "description": "batchRecover caches fetched batches and handles batch recovery requests for validators. When validator misses batches from proposal, it requests them from proposer via msgbus",
+            "interfaces": "newBatchRecover, CacheFetchedTxBatches, RecoverTxBatches, ProcessRecoverReq, ProcessRecoverRes"
+          },
+          {
+            "name": "batch_validator",
+            "description": "Transaction and batch validation: signature verification, timestamp check, txId format, duplicate detection via TxFilter (cuckoo filter). Validates batch signature from proposer",
+            "interfaces": "validateTx, validateTxBatch, batchValidateFunc type"
+          },
+          {
+            "name": "tx_forwarder",
+            "description": "Forwards transactions to proposer nodes. ForwardMod: '0' = self only (default), '1' = proposer node. Uses chainConf to determine current proposer",
+            "interfaces": "newTxForwarder, Forwarder.Forward, ForwardMod type"
+          },
+          {
+            "name": "tx_cache",
+            "description": "txCache buffers incoming transactions before batch creation. Configurable threshold count and flush timeout",
+            "interfaces": "newTxCache, Add, GetTxs, Clear"
+          }
+        ],
+        "relationships": "Uses chainmaker.org/chainmaker/lws for WAL persistence. Uses msgbus for RecvTxPoolMsg/TxPoolSignal topics. Uses protocol.TxFilter for duplicate detection. Uses protocol.AccessControlProvider for signature verification. Uses protocol.ChainConf for pool size limits."
+      }
+    },
+    {
+      "name": "chain-module/consensus-tbft",
+      "description": "TBFT (Tendermint BFT) consensus algorithm implementation for ChainMaker. Provides Byzantine fault tolerance with 3f+1 validators. Implements protocol.ConsensusEngine interface with Propose->Prevote->Precommit->Commit state machine",
+      "interfaces": "ConsensusTBFTImpl implements protocol.ConsensusEngine: Start, Stop, OnMessage, OnQuit; ConsensusState represents node state",
+      "internal": {
+        "submodules": [
+          {
+            "name": "consensus_tbft_impl",
+            "description": "Main TBFT implementation. State machine: Step_NEW_HEIGHT->Step_PROPOSE->Step_PREVOTE->Step_PRECOMMIT->Step_COMMIT. Uses WAL for crash recovery. Configurable timeouts via chainconf (TBFT_propose_timeout, TBFT_propose_delta_timeout, TBFT_blocks_per_proposer). Subscribes to msgbus topics: ProposedBlock, VerifyResult, RecvConsensusMsg, RecvConsistentMsg, BlockInfo",
+            "interfaces": "ConsensusTBFTImpl.Start/Stop/OnMessage/OnQuit, enterNewHeight, enterPropose, enterPrevote, enterPrecommit, commitBlock"
+          },
+          {
+            "name": "state",
+            "description": "ConsensusState tracks Height, Round, Step, Proposal, LockedProposal, ValidProposal, and heightRoundVoteSet. ConsensusStateCache caches historical states (default 10). ConsensusFutureMsgCache caches future proposals/votes for out-of-order message handling",
+            "interfaces": "NewConsensusState, ConsensusState.toProto, consensusStateCache, ConsensusFutureMsgCache"
+          },
+          {
+            "name": "vote",
+            "description": "Vote management: Proposal, Vote (Prevote/Precommit), BlockVotes, roundVoteSet, heightRoundVoteSet. Tracks votes by hash with Sum counter. Requires >2/3 votes for quorum",
+            "interfaces": "NewProposal, NewVote, BlockVotes, roundVoteSet.addVote, heightRoundVoteSet"
+          },
+          {
+            "name": "validator",
+            "description": "validatorSet manages consensus validators. Proposer selection: round-robin based on height/round with blocksPerProposer. GetProposer supports both v2.3.0 and v2.3.1+ algorithms for backward compatibility",
+            "interfaces": "newValidatorSet, validatorSet.GetProposer/GetProposerV230/HasValidator/Size/updateValidators/checkProposed"
+          },
+          {
+            "name": "tbft_status_broadcaster",
+            "description": "Broadcasts TBFT status (height, round, step) to peers periodically. Helps nodes detect lagging and trigger sync",
+            "interfaces": "TBFTStatusBroadcaster.Start/Stop/BroadcastStatus"
+          },
+          {
+            "name": "timesched",
+            "description": "Time-based scheduler for consensus timeouts. Manages propose/prevote/precommit timeouts with delta increases per round",
+            "interfaces": "TimeSched, scheduleTimeout, timeoutPropose, timeoutPrevote, timeoutPrecommit"
+          },
+          {
+            "name": "utils",
+            "description": "Utility functions for TBFT consensus. GetValidatorList extracts validators from chain config. VerifyBlockSignatures/VerifyRoundQc/VerifyQcFromVotes verify signatures using 2/3 majority rule and parallel verification. InitLWS initializes WAL with 64MB segment size and 3 file limit",
+            "interfaces": "GetValidatorList, GetValidatorListFromConfig, VerifyBlockSignatures, VerifyRoundQc, VerifyQcFromVotes, verifyVotes, InitLWS, CurrentTime"
+          }
+        ],
+        "relationships": "Uses chainmaker.org/chainmaker/lws for WAL. Uses msgbus for consensus message routing. Uses consensus-utils for consistent_service and wal_service. Uses protocol.SigningMember for signing proposals/votes. Uses protocol.AccessControlProvider for signature verification."
+      }
+    },
+    {
+      "name": "chain-module/vm-evm",
+      "description": "Ethereum Virtual Machine implementation for ChainMaker. Executes Solidity smart contracts compatible with Ethereum. Implements protocol.RuntimeInstance interface with full EVM opcode support and precompiled contracts",
+      "interfaces": "InstancesManager.NewRuntimeInstance; RuntimeInstance.Invoke implements protocol.RuntimeInstance",
+      "internal": {
+        "submodules": [
+          {
+            "name": "runtime",
+            "description": "RuntimeInstance wraps EVM execution, handles contract invocation and deployment. Bridges ChainMaker TxSimContext with EVM environment. Manages contract events and gas accounting",
+            "interfaces": "InstancesManager.NewRuntimeInstance, RuntimeInstance.Invoke"
+          },
+          {
+            "name": "evm-go/evm",
+            "description": "Core EVM engine with stack, memory, storage, and instruction execution. Supports cross-contract calls via closure mechanism. Precompiled contracts 1-15 for crypto operations and chainmaker-specific params (senderOrgId, senderRole, senderPk, creatorOrgId, etc.)",
+            "interfaces": "EVM.New, EVM.ExecuteContract, ExecuteResult"
+          },
+          {
+            "name": "evm-go/instructions",
+            "description": "EVM opcode implementations: arithmetic, bit, comparison, stack, memory, storage, log, pc, environment, closure (CALL, DELEGATECALL, STATICCALL, CREATE, CREATE2)",
+            "interfaces": "IInstructions.ExecuteContract, individual opcode handlers"
+          },
+          {
+            "name": "evm-go/storage",
+            "description": "Contract storage interface bridging EVM state to ChainMaker state DB. IExternalStorage implemented by ContractStore. ResultCache for state changes",
+            "interfaces": "Storage, IExternalStorage, ResultCache, MergeResultCache"
+          },
+          {
+            "name": "evm-go/precompiledContracts",
+            "description": "Precompiled contracts: ecRecover(1), sha256(2), ripemd160(3), identity(4), modexp(5), bn256Add(6), bn256ScalarMul(7), bn256Pairing(8), blake2f(9), plus ChainMaker-specific (10-15 for sender/creator info)",
+            "interfaces": "IPrecompiledContract.Execute/GasCost, Contracts map"
+          },
+          {
+            "name": "evm-go/opcodes",
+            "description": "Opcode constants and metadata: gas costs, stack requirements, opcode names",
+            "interfaces": "OpCode type, opcode constants (STOP, ADD, MUL, ..., CREATE2)"
+          }
+        ],
+        "relationships": "Uses chainmaker.org/chainmaker/common/v2/evmutils for 256-bit arithmetic and address handling. Uses protocol.TxSimContext for state access. Storage layer bridges to ChainMaker's BlockchainStore."
+      }
+    },
+    {
+      "name": "chain-module/sdk-go",
+      "description": "Go SDK for interacting with ChainMaker blockchain nodes. Provides complete client API for contract deployment, invocation, querying, chain configuration, certificate management, archive access, and event subscription via gRPC",
+      "interfaces": "SDKInterface (main interface); ChainClient (implementation); NewChainClient, NewChainClientWithOptions",
+      "internal": {
+        "submodules": [
+          {
+            "name": "sdk_interface",
+            "description": "SDKInterface defines all client operations: user contract (create/upgrade/freeze/unfreeze/revoke/invoke/query), system contract (getTx/getBlock/getChainInfo), chain config, cert management, gas management, subscribe, archive",
+            "interfaces": "SDKInterface with 100+ methods covering all blockchain operations"
+          },
+          {
+            "name": "sdk_client",
+            "description": "ChainClient implements SDKInterface. Manages gRPC connection pool, user credentials (cert/privateKey), auth type (PermissionedWithCert/PermissionedWithKey/Public), retry logic, hash type configuration",
+            "interfaces": "ChainClient, NewChainClient, NewChainClientWithOptions, ChainClientOption functions"
+          },
+          {
+            "name": "sdk_config",
+            "description": "Configuration: NodeConfig (addr, connCnt, TLS, caPaths), ChainClientConfig, ArchiveConfig, RPCClientConfig. Functional options pattern with With* functions",
+            "interfaces": "NodeConfig, NodeOption, ChainClientOption, WithUserCrt, WithUserKey, WithChainId, WithOrgId, etc."
+          },
+          {
+            "name": "sdk_user_contract",
+            "description": "User contract operations: CreateContractCreatePayload, InvokeContract, QueryContract, GetTxRequest, SendTxRequest with sync/async result modes",
+            "interfaces": "CreateContractCreatePayload, InvokeContract, InvokeContractWithLimit, QueryContract, SendContractManageRequest"
+          },
+          {
+            "name": "sdk_system_contract",
+            "description": "System contract queries: GetTxByTxId, GetBlockByHeight, GetBlockByHash, GetChainInfo, GetNodeChainList, GetCurrentBlockHeight",
+            "interfaces": "GetTxByTxId, GetBlockByHeight, GetBlockByHash, GetChainInfo, GetBlockHeaderByHeight, GetBlockByTxId"
+          },
+          {
+            "name": "sdk_chain_config",
+            "description": "Chain configuration management: GetChainConfig, CreateChainConfigXxxPayload for consensus/trust-root/permission/block-config updates",
+            "interfaces": "GetChainConfig, CreateChainConfigCoreUpdatePayload, CreateChainConfigTrustRootAddPayload, CreateChainConfigPermissionAddPayload, etc."
+          },
+          {
+            "name": "sdk_subscribe",
+            "description": "Event subscription: SubscribeBlock, SubscribeTx, SubscribeContractEvent for real-time blockchain event streaming",
+            "interfaces": "SubscribeBlock, SubscribeTx, SubscribeContractEvent"
+          },
+          {
+            "name": "sdk_archive",
+            "description": "Archive data access: GetArchivedBlockByHeight, GetArchivedTxByTxId. Supports archive center (gRPC/HTTP) and MySQL backends",
+            "interfaces": "GetArchivedBlockByHeight, GetArchivedTxByTxId, ArchiveService interface"
+          },
+          {
+            "name": "conn_pool",
+            "description": "gRPC connection pool with round-robin load balancing across multiple nodes. Supports TLS/mTLS",
+            "interfaces": "ConnectionPool interface, ClientConnectionPool implementation"
+          }
+        ],
+        "relationships": "Uses chainmaker.org/chainmaker/pb-go/v2 for all protobuf types. Uses chainmaker.org/chainmaker/common/v2/crypto for signing. Uses google.golang.org/grpc for RPC. Uses github.com/Rican7/retry for retry logic."
+      }
+    },
+    {
+      "name": "yzchain-go",
+      "description": "Main ChainMaker blockchain node executable. Orchestrates all modules (consensus, txpool, vm, sync, rpc, net) and manages blockchain lifecycle. Supports multiple blockchains per node with shared P2P network",
+      "interfaces": "CLI commands: start, version, config, rebuild-dbs",
+      "internal": {
+        "submodules": [
+          {
+            "name": "main/cmd",
+            "description": "CLI commands using cobra: cli_start.go (start node), cli_version.go (version info), cli_config.go (config validation), cli_rebuild.go (rebuild databases)",
+            "interfaces": "StartCMD, VersionCMD, ConfigCMD, RebuildDbsCMD"
+          },
+          {
+            "name": "module/blockchain",
+            "description": "Blockchain orchestrates all modules for a single chain: store, consensus, txpool, vm, core, sync, netService, accessControl, txFilter. ChainMakerServer manages multiple Blockchain instances sharing a P2P network",
+            "interfaces": "NewChainMakerServer, ChainMakerServer.Init/Start/Stop, Blockchain.Init/Start/Stop"
+          },
+          {
+            "name": "module/core",
+            "description": "Block processing core: BlockProposer generates blocks, BlockVerifier validates blocks, BlockCommitter commits blocks. Scheduler executes transactions",
+            "interfaces": "CoreEngine interface implementation"
+          },
+          {
+            "name": "module/accesscontrol",
+            "description": "Access control implementation: certificate/public-key based authentication, policy evaluation with MAJORITY/ALL/ANY/SELF rules, role management (ADMIN/CLIENT/CONSENSUS)",
+            "interfaces": "AccessControlProvider implementation"
+          },
+          {
+            "name": "module/net",
+            "description": "P2P networking using libp2p: peer discovery, message routing, pub-sub for consensus messages",
+            "interfaces": "Net interface implementation"
+          },
+          {
+            "name": "module/rpcserver",
+            "description": "gRPC server exposing ChainMaker API: transaction submission, block queries, chain config, subscribe",
+            "interfaces": "RPC service implementations"
+          },
+          {
+            "name": "module/sync",
+            "description": "Block synchronization: request missing blocks from peers, sync scheduler, state machine for sync protocol",
+            "interfaces": "SyncService implementation"
+          },
+          {
+            "name": "module/snapshot",
+            "description": "Snapshot management for fast sync and state reconstruction",
+            "interfaces": "SnapshotManager implementation"
+          },
+          {
+            "name": "module/txfilter",
+            "description": "Transaction duplicate filter using bird's nest (cuckoo filter) or sharding bird's nest",
+            "interfaces": "TxFilter interface implementation"
+          },
+          {
+            "name": "module/txpool",
+            "description": "Transaction pool factory: creates single or batch tx pool based on config",
+            "interfaces": "TxPool factory"
+          },
+          {
+            "name": "module/vm",
+            "description": "VM manager factory: instantiates native, WASM, EVM, Docker VM runtimes",
+            "interfaces": "VmManager factory"
+          },
+          {
+            "name": "module/consensus",
+            "description": "Consensus factory: creates Solo, TBFT, Raft consensus engines",
+            "interfaces": "ConsensusEngine factory"
+          },
+          {
+            "name": "module/subscriber",
+            "description": "Event subscriber for block/tx events, used by RPC subscribe API",
+            "interfaces": "EventSubscriber"
+          }
+        ],
+        "relationships": "Main executable that integrates all chain-module/* dependencies. Uses localconf for configuration, logger for logging, protocol for interfaces. Connects msgbus between modules. Modules communicate via msgbus topics: ProposedBlock, VerifyResult, CommitBlock, TxPoolSignal, etc."
+      }
+    },
+    {
+      "name": "yzchain-cryptogen",
+      "description": "Cryptographic material generation tool for ChainMaker. Generates CA certificates, node certificates, user certificates, and key pairs for consortium setup. Supports RSA, ECC, SM2 algorithms",
+      "interfaces": "CLI commands: generate, extend, showconfig",
+      "internal": {
+        "submodules": [
+          {
+            "name": "command/generate",
+            "description": "Generates complete crypto material for organizations: CA cert/key, node certs (sign + TLS), user certs (admin, client, light, consensus). Supports GMTLS double-cert mode for SM2",
+            "interfaces": "GenerateCmd() *cobra.Command"
+          },
+          {
+            "name": "command/extend",
+            "description": "Extends existing PKI with additional nodes or users. Uses existing CA to sign new certificates",
+            "interfaces": "ExtendCmd() *cobra.Command"
+          },
+          {
+            "name": "config",
+            "description": "Configuration loading from crypto_config_template.yml: org count, key algorithm (RSA/ECC_P256/SM2), hash algorithm, certificate validity, SANS",
+            "interfaces": "LoadCryptoGenConfig, GetCryptoGenConfig"
+          }
+        ],
+        "relationships": "Uses chainmaker.org/chainmaker/common/v2/cert for certificate creation. Uses chainmaker.org/chainmaker/common/v2/crypto for key generation. Uses chainmaker.org/chainmaker/common/v2/crypto/x509 for X.509 operations."
+      }
     }
   ],
-  "relationships": "chain-module/utils provides standalone utility functions consumed by other ChainMaker modules for blockchain operations. chain-module/common provides foundational crypto, encoding utilities, Redis client, and WAL. chain-module/protocol defines all core interfaces that other modules implement. Dependencies: utils → common, protocol, pb-go; common → pb-go (some submodules); all implementation modules → protocol (for interfaces)."
+  "relationships": "Project Structure: chain-module/ contains shared libraries (utils, common, protocol, logger, localconf), VM implementations (vm-native, vm-evm), transaction pool (txpool-batch), consensus (consensus-tbft), and SDK (sdk-go). yzchain-go is the main node executable integrating all modules. yzchain-cryptogen is a PKI tool for generating crypto material. Dependency Graph: utils → common, protocol, pb-go; common → pb-go (some submodules); protocol → pb-go (defines interfaces only); vm-native → protocol, utils, common, pb-go, chainconf; vm-evm → protocol, common/evmutils; logger → common/log, sarama (kafka); localconf → logger, pb-go, viper; txpool-batch → protocol, common, lws, msgbus, pb-go; consensus-tbft → protocol, common, lws, consensus-utils, msgbus; sdk-go → common/crypto, pb-go, grpc; yzchain-go → all chain-module/* dependencies; yzchain-cryptogen → common/cert, common/crypto. Inter-module Communication: Modules communicate via msgbus topics (ProposedBlock, VerifyResult, CommitBlock, TxPoolSignal, ChainConfig, RecvConsensusMsg, etc.). Protocol interfaces enable pluggable implementations."
 }
