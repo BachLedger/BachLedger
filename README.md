@@ -1,5 +1,9 @@
 # BachLedger
 
+<p align="center">
+  <img src="assets/bach.jpg" alt="Johann Sebastian Bach" width="180">
+</p>
+
 **BachLedger** is a high-performance blockchain system that orchestrates parallel transaction execution with dynamic dependency detection and seamless scheduling.
 
 ## Paper
