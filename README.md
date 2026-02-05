@@ -6,7 +6,7 @@
 
 **BachLedger** is named after [Johann Sebastian Bach](https://en.wikipedia.org/wiki/Johann_Sebastian_Bach), the legendary composer renowned for his mastery of polyphony — the art of weaving multiple independent musical voices into a harmonious whole. Just as Bach orchestrated complex fugues where each voice moves independently yet contributes to a unified composition, BachLedger orchestrates parallel transaction execution where multiple transactions run concurrently while maintaining blockchain consistency.
 
-BachLedger is a high-performance blockchain system that achieves this through dynamic dependency detection and seamless scheduling.
+BachLedger is a high-performance blockchain system that achieves this through dynamic dependency detection and seamless scheduling. It is developed based on [ChainMaker](https://chainmaker.org.cn/), an open-source blockchain platform.
 
 ## Paper
 
@@ -87,4 +87,6 @@ If you use BachLedger in your research, please cite:
 
 ## License
 
-See individual submodule repositories for license information.
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+BachLedger is developed based on [ChainMaker](https://github.com/chainmaker-io), which is also licensed under Apache License 2.0.
