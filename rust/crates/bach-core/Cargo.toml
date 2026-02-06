@@ -13,11 +13,11 @@ bach-crypto.workspace = true
 bach-storage.workspace = true
 bach-evm.workspace = true
 bach-scheduler.workspace = true
-bach-consensus.workspace = true
-bach-network.workspace = true
 bach-txpool.workspace = true
 bach-metrics.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tokio.workspace = true
-anyhow.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true

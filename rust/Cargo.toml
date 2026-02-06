@@ -7,6 +7,7 @@ members = [
     "crates/bach-rlp",
     "crates/bach-storage",
     "crates/bach-evm",
+    "crates/bach-evm-tests",
     "crates/bach-scheduler",
     "crates/bach-consensus",
     "crates/bach-network",
@@ -31,6 +32,7 @@ bach-types = { path = "crates/bach-types" }
 bach-rlp = { path = "crates/bach-rlp" }
 bach-storage = { path = "crates/bach-storage" }
 bach-evm = { path = "crates/bach-evm" }
+bach-evm-tests = { path = "crates/bach-evm-tests" }
 bach-scheduler = { path = "crates/bach-scheduler" }
 bach-consensus = { path = "crates/bach-consensus" }
 bach-network = { path = "crates/bach-network" }

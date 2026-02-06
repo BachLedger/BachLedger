@@ -15,3 +15,8 @@ thiserror.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
 dashmap.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
+k256.workspace = true
+bytes.workspace = true
