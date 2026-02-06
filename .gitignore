@@ -26,6 +26,9 @@ Thumbs.db
 
 chainmaker
 
+# Memo index (auto-generated)
+.memo/
+
 # BachLedger test data and keys
 rust/testdata/
 rust/test-keys/
