@@ -23,3 +23,12 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+
+chainmaker
+
+# BachLedger test data and keys
+rust/testdata/
+rust/test-keys/
+rust/node.key
+rust/*.json
+!rust/package.json
