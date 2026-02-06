@@ -1,0 +1,85 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/bach-primitives",
+    "crates/bach-crypto",
+    "crates/bach-types",
+    "crates/bach-rlp",
+    "crates/bach-storage",
+    "crates/bach-evm",
+    "crates/bach-scheduler",
+    "crates/bach-consensus",
+    "crates/bach-network",
+    "crates/bach-txpool",
+    "crates/bach-metrics",
+    "crates/bach-core",
+    "crates/bach-node",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["BachLedger Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bachledger/bachledger-rust"
+
+[workspace.dependencies]
+# 内部 crates
+bach-primitives = { path = "crates/bach-primitives" }
+bach-crypto = { path = "crates/bach-crypto" }
+bach-types = { path = "crates/bach-types" }
+bach-rlp = { path = "crates/bach-rlp" }
+bach-storage = { path = "crates/bach-storage" }
+bach-evm = { path = "crates/bach-evm" }
+bach-scheduler = { path = "crates/bach-scheduler" }
+bach-consensus = { path = "crates/bach-consensus" }
+bach-network = { path = "crates/bach-network" }
+bach-txpool = { path = "crates/bach-txpool" }
+bach-metrics = { path = "crates/bach-metrics" }
+bach-core = { path = "crates/bach-core" }
+
+# 密码学
+k256 = { version = "0.13", features = ["ecdsa", "ecdsa-core"] }
+sha3 = "0.10"
+sha2 = "0.10"
+
+# 数据类型
+primitive-types = { version = "0.12", features = ["rlp"] }
+
+# 存储
+rocksdb = "0.22"
+
+# 序列化
+rlp = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# 错误处理
+thiserror = "1"
+anyhow = "1"
+
+# 工具
+bytes = "1"
+hex = "0.4"
+rand = "0.8"
+parking_lot = "0.12"
+dashmap = "5"
+
+# 测试
+proptest = "1"
+criterion = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+
+[profile.bench]
+opt-level = 3
+debug = true

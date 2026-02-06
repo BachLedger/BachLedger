@@ -1,0 +1,17 @@
+[package]
+name = "bach-consensus"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "TBFT consensus for BachLedger"
+
+[dependencies]
+bach-primitives.workspace = true
+bach-types.workspace = true
+bach-crypto.workspace = true
+bach-network.workspace = true
+bach-metrics.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
