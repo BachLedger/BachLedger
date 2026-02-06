@@ -1,0 +1,23 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/txfilter";
+
+// TODO V2.4.0, migrates other tx filter related objects to the current package
+package txfilter;
+
+// Stat contains stat
+message Stat {
+  // A value greater than 0 indicates a false positive in the tx filter, support for multiple transactions in the future
+  uint32 fp_count = 1;
+  // Filter query time
+  int64 filter_costs = 2;
+  // DB query time
+  int64 db_costs = 3;
+
+}

@@ -1,0 +1,123 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+import "common/contract.proto";
+
+// methods of user management contract
+enum ContractManageFunction {
+    // init contract
+    INIT_CONTRACT = 0;
+
+    // upgrade contract version
+    UPGRADE_CONTRACT = 1;
+
+    // freeze contract, cannot be invoked temporarily
+    FREEZE_CONTRACT = 2;
+
+    // unfreeze contract to normal status
+    UNFREEZE_CONTRACT = 3;
+
+    // revoke contract, cannot be invoked permanently
+    REVOKE_CONTRACT = 4;
+
+    // grant access to a native contract
+    GRANT_CONTRACT_ACCESS = 5;
+
+    // revoke access to a native contract
+    REVOKE_CONTRACT_ACCESS = 6;
+
+    // verify if has access to a certain native contract
+    VERIFY_CONTRACT_ACCESS = 7;
+
+    //initial new chain maker version native contract list
+    INIT_NEW_NATIVE_CONTRACT = 8;
+}
+
+// methods of contract query
+enum ContractQueryFunction {
+    // get contract information
+    GET_CONTRACT_INFO = 0;
+
+    // get contract bytecode
+    GET_CONTRACT_BYTECODE = 1;
+
+    // get all installed contract
+    GET_CONTRACT_LIST = 2;
+
+    // get native contract list has access to
+    GET_DISABLED_CONTRACT_LIST = 3;
+}
+
+// init contract parameters
+message InitContract {
+    enum Parameter {
+        CONTRACT_NAME = 0;
+        CONTRACT_RUNTIME_TYPE = 1;
+        CONTRACT_VERSION = 2;
+        CONTRACT_BYTECODE = 3;
+    }
+}
+
+// upgrade contract parameters
+message UpgradeContract {
+    enum Parameter {
+        CONTRACT_NAME = 0;
+        CONTRACT_RUNTIME_TYPE = 1;
+        CONTRACT_VERSION = 2;
+        CONTRACT_BYTECODE = 3;
+    }
+}
+
+// freeze contract parameters
+message FreezeContract {
+    enum Parameter {
+        CONTRACT_NAME = 0;
+    }
+}
+
+// unfreeze contract parameters
+message UnfreezeContract {
+    enum Parameter {
+        CONTRACT_NAME = 0;
+    }
+}
+
+// revoke contract parameters
+message RevokeContract {
+    enum Parameter {
+        CONTRACT_NAME = 0;
+    }
+}
+
+// query contract parameters
+message GetContractInfo {
+    enum Parameter {
+        CONTRACT_NAME = 0;
+    }
+}
+
+message ContractAccess {
+    enum Parameter {
+        NATIVE_CONTRACT_NAME = 0;
+    }
+}
+
+message ContractInfo {
+    repeated ContractTransaction contract_transaction = 1;
+}
+
+message ContractTransaction {
+    common.Contract contract = 1;
+    string tx_id = 2;
+}

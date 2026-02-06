@@ -1,0 +1,46 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of certificate management
+enum CertManageFunction {
+    // add one certificate
+    CERT_ADD = 0;
+
+    // delete certificates
+    CERTS_DELETE = 1;
+
+    // query certificates
+    CERTS_QUERY = 2;
+
+    // freeze certificates
+    CERTS_FREEZE = 3;
+
+    // unfreeze certificates
+    CERTS_UNFREEZE = 4;
+
+    // revoke certificates
+    CERTS_REVOKE = 5;
+
+    // add one certificate alias, any
+    CERT_ALIAS_ADD = 6;
+
+    // update one certificate alias, self
+    CERT_ALIAS_UPDATE = 7;
+
+    // delete certificate alias, admin
+    CERTS_ALIAS_DELETE = 8;
+
+    // query certificate alias, admin
+    CERTS_ALIAS_QUERY = 9;
+}

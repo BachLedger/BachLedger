@@ -1,0 +1,27 @@
+/*
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+Copyright (C) BABEC. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+syntax = "proto3";
+
+package proto;
+
+option java_package = "org.chainmaker.pb.vm";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/vm";
+
+message BatchKey {
+  string key = 1;
+  string field = 2;
+  bytes  value = 3;
+  string contract_name = 4;
+}
+
+message BatchKeys {
+  repeated BatchKey Keys = 1;
+}
+
+message Keys {
+  repeated string key = 1;
+}

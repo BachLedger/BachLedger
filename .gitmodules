@@ -1,75 +1,75 @@
-[submodule "yzchain-go"]
-	path = yzchain-go
+[submodule "chainmaker/yzchain-go"]
+	path = chainmaker/yzchain-go
 	url = https://github.com/BachLedger/yzchain-go.git
-[submodule "yzchain-cryptogen"]
-	path = yzchain-cryptogen
+[submodule "chainmaker/yzchain-cryptogen"]
+	path = chainmaker/yzchain-cryptogen
 	url = https://github.com/BachLedger/yzchain-cryptogen.git
-[submodule "chain-module/chainconf"]
-	path = chain-module/chainconf
+[submodule "chainmaker/chain-module/chainconf"]
+	path = chainmaker/chain-module/chainconf
 	url = https://github.com/BachLedger/chainconf.git
-[submodule "chain-module/common"]
-	path = chain-module/common
+[submodule "chainmaker/chain-module/common"]
+	path = chainmaker/chain-module/common
 	url = https://github.com/BachLedger/common.git
-[submodule "chain-module/consensus-raft"]
-	path = chain-module/consensus-raft
+[submodule "chainmaker/chain-module/consensus-raft"]
+	path = chainmaker/chain-module/consensus-raft
 	url = https://github.com/BachLedger/consensus-raft.git
-[submodule "chain-module/consensus-solo"]
-	path = chain-module/consensus-solo
+[submodule "chainmaker/chain-module/consensus-solo"]
+	path = chainmaker/chain-module/consensus-solo
 	url = https://github.com/BachLedger/consensus-solo.git
-[submodule "chain-module/consensus-tbft"]
-	path = chain-module/consensus-tbft
+[submodule "chainmaker/chain-module/consensus-tbft"]
+	path = chainmaker/chain-module/consensus-tbft
 	url = https://github.com/BachLedger/consensus-tbft.git
-[submodule "chain-module/consensus-utils"]
-	path = chain-module/consensus-utils
+[submodule "chainmaker/chain-module/consensus-utils"]
+	path = chainmaker/chain-module/consensus-utils
 	url = https://github.com/BachLedger/consensus-utils.git
-[submodule "chain-module/localconf"]
-	path = chain-module/localconf
+[submodule "chainmaker/chain-module/localconf"]
+	path = chainmaker/chain-module/localconf
 	url = https://github.com/BachLedger/localconf.git
-[submodule "chain-module/logger"]
-	path = chain-module/logger
+[submodule "chainmaker/chain-module/logger"]
+	path = chainmaker/chain-module/logger
 	url = https://github.com/BachLedger/logger.git
-[submodule "chain-module/net-common"]
-	path = chain-module/net-common
+[submodule "chainmaker/chain-module/net-common"]
+	path = chainmaker/chain-module/net-common
 	url = https://github.com/BachLedger/net-common.git
-[submodule "chain-module/net-libp2p"]
-	path = chain-module/net-libp2p
+[submodule "chainmaker/chain-module/net-libp2p"]
+	path = chainmaker/chain-module/net-libp2p
 	url = https://github.com/BachLedger/net-libp2p.git
-[submodule "chain-module/pb"]
-	path = chain-module/pb
+[submodule "chainmaker/chain-module/pb"]
+	path = chainmaker/chain-module/pb
 	url = https://github.com/BachLedger/pb.git
-[submodule "chain-module/pb-go"]
-	path = chain-module/pb-go
+[submodule "chainmaker/chain-module/pb-go"]
+	path = chainmaker/chain-module/pb-go
 	url = https://github.com/BachLedger/pb-go.git
-[submodule "chain-module/protocol"]
-	path = chain-module/protocol
+[submodule "chainmaker/chain-module/protocol"]
+	path = chainmaker/chain-module/protocol
 	url = https://github.com/BachLedger/protocol.git
-[submodule "chain-module/sdk-go"]
-	path = chain-module/sdk-go
+[submodule "chainmaker/chain-module/sdk-go"]
+	path = chainmaker/chain-module/sdk-go
 	url = https://github.com/BachLedger/sdk-go.git
-[submodule "chain-module/store"]
-	path = chain-module/store
+[submodule "chainmaker/chain-module/store"]
+	path = chainmaker/chain-module/store
 	url = https://github.com/BachLedger/store.git
-[submodule "chain-module/txpool-batch"]
-	path = chain-module/txpool-batch
+[submodule "chainmaker/chain-module/txpool-batch"]
+	path = chainmaker/chain-module/txpool-batch
 	url = https://github.com/BachLedger/txpool-batch.git
-[submodule "chain-module/txpool-normal"]
-	path = chain-module/txpool-normal
+[submodule "chainmaker/chain-module/txpool-normal"]
+	path = chainmaker/chain-module/txpool-normal
 	url = https://github.com/BachLedger/txpool-normal.git
-[submodule "chain-module/utils"]
-	path = chain-module/utils
+[submodule "chainmaker/chain-module/utils"]
+	path = chainmaker/chain-module/utils
 	url = https://github.com/BachLedger/utils.git
-[submodule "chain-module/vm"]
-	path = chain-module/vm
+[submodule "chainmaker/chain-module/vm"]
+	path = chainmaker/chain-module/vm
 	url = https://github.com/BachLedger/vm.git
-[submodule "chain-module/vm-engine"]
-	path = chain-module/vm-engine
+[submodule "chainmaker/chain-module/vm-engine"]
+	path = chainmaker/chain-module/vm-engine
 	url = https://github.com/BachLedger/vm-engine.git
-[submodule "chain-module/vm-evm"]
-	path = chain-module/vm-evm
+[submodule "chainmaker/chain-module/vm-evm"]
+	path = chainmaker/chain-module/vm-evm
 	url = https://github.com/BachLedger/vm-evm.git
-[submodule "chain-module/vm-native"]
-	path = chain-module/vm-native
+[submodule "chainmaker/chain-module/vm-native"]
+	path = chainmaker/chain-module/vm-native
 	url = https://github.com/BachLedger/vm-native.git
-[submodule "chain-module/ExpScript-Data"]
-	path = chain-module/ExpScript-Data
+[submodule "chainmaker/chain-module/ExpScript-Data"]
+	path = chainmaker/chain-module/ExpScript-Data
 	url = https://github.com/BachLedger/ExpScript-Data.git

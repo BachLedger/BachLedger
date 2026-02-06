@@ -1,0 +1,66 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+enum SystemContract {
+    // system chain configuration contract
+    // used to add, delete and change the chain configuration
+    CHAIN_CONFIG = 0;
+
+    // system chain query contract
+    // used to query the configuration on the chain
+    CHAIN_QUERY = 1;
+
+    // system certificate storage contract
+    // used to manage certificates
+    CERT_MANAGE = 2;
+
+    // governance contract
+    GOVERNANCE = 3;
+
+    // multi signature contract on chain
+    MULTI_SIGN = 4;
+
+    // manage user contract
+    CONTRACT_MANAGE = 5;
+
+    // private compute contract
+    PRIVATE_COMPUTE = 6;
+
+    // erc20 contract for DPoS
+    DPOS_ERC20 = 7;
+
+    // stake contract for dpos
+    DPOS_STAKE = 8;
+
+    //subscribe block info,tx info and contract info.
+    SUBSCRIBE_MANAGE = 9;
+
+    //archive/restore block
+    ARCHIVE_MANAGE = 10;
+
+    //cross chain transaction system contract
+    CROSS_TRANSACTION = 11;
+
+    // pubkey manage system contract
+    PUBKEY_MANAGE = 12;
+
+    // account manager system contract
+    ACCOUNT_MANAGER = 13;
+
+    // transaction manager system contract
+    TRANSACTION_MANAGER = 18;
+
+    // for test or debug contract code
+    T=99;
+}

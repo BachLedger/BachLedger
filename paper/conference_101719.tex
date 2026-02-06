@@ -1,0 +1,419 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+% \usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+% \usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{algpseudocodex}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+% Author
+\usepackage{authblk}
+\usepackage[style=ieee, sorting=none, natbib=true]{biblatex}
+\addbibresource{refs.bib}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+
+% \title{Uninterrupted Choreography with Transient Partners: A High-Performance Blockchain Design}
+% \title{Uninterrupted Scheduling with Transient Partners: An Algorithm-to-Architecture High-Parallelism Blockchain Design}
+
+\title{BachLedger: Orchestrating Parallel Execution with Dynamic Dependency Detection and Seamless Scheduling\\
+\thanks{Project supported by the Key Program of the National Natural Science Foundation of China (Grant No. 62232004).}
+\thanks{Xuan Ding is the corresponding author.}
+}
+
+\renewcommand\Authands{, }
+
+\author[1]{Yi Yang}
+\author[2]{Guangyong Shang}
+\author[2]{Guangpeng Qi}
+\author[2]{Zhen Ma}
+\author[2]{Yaxiong Liu}
+\author[1]{Jiazhou Tian}
+\author[3]{Aocheng Duan} 
+\author[2]{\\Meng Zhang}
+\author[2]{Jingying Li}
+\author[1]{Xuan Ding}
+
+\affil[1]{School of Software, Tsinghua University, Beijing, China}
+\affil[2]{Inspur Yunzhou Industrial Internet Co., Ltd, Jinan, Shandong, China}
+\affil[3]{School of Cyber Engineering, Xidian University, Xi'an, Shaanxi, China}
+\affil[ ]{\texttt{yangyi23@mails.tsinghua.edu.cn}}
+\affil[ ]{\texttt{\{shangguangyong, qigp, mazhenrj, liuyaxiong01\}@inspur.com}}
+\affil[ ]{\texttt{duanac@stu.xidian.edu.cn}}
+\affil[ ]{\texttt{tjz22@mails.tsinghua.edu.cn}}
+\affil[ ]{\texttt{\{zhangm\_lc, lijingying01\}@inspur.com}}
+\affil[ ]{\texttt{dingxuan@tsinghua.edu.cn}}
+
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Blockchain technology inherently necessitates redundant computation to achieve consensus among untrusted parties because of its fundamental threat model. This requirement, however, compromises system performance and impedes the widespread adoption of blockchain. To leverage existing physical resources, current research on high-performance consortium blockchain algorithms and architectures frequently employs cluster-node architectures to expand the parallel processing capability of traditional single physical nodes. Our investigation reveals a significant trend as the parallel capability of individual nodes improves. The idle time caused by synchronization of all transactions within each block, previously considered negligible, has become increasingly significant. To address this, we present BachLedger, which implements Seamless Scheduling to fully utilize inter-block thread idle time, thereby augmenting system resource utilization and achieving overall performance improvements. Our experimental results demonstrate that our algorithm surpasses current state-of-the-art (SOTA) performance levels in high-performance consortium blockchains and effectively resolves the aforementioned synchronization issue. Furthermore, this scheduling algorithm offers enhanced scalability for BachLedger, positioning it as a promising solution for future blockchain implementations.
+\end{abstract}
+
+\begin{IEEEkeywords}
+blockchain, parallel execution, dependency detection, scheduling, high-performance computing
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Blockchain systems, as a decentralized distributed computing paradigm, face unique challenges in performance and scalability compared to traditional distributed systems like \cite{Fangorn2021, liBatchJobsLoad2024, spark}. Although both adopt distributed architectures, the fundamental difference in their underlying threat models directly leads to a vast divergence in algorithm design, which in turn results in a significant performance gap in the overall processing pipeline comprised of consensus, execution, and storage.
+
+In traditional distributed systems, nodes are typically treated as trustworthy, allowing them to leverage work partitioning and load balancing to maximize system throughput. Blockchain systems operate under a totally distinct threat model where nodes inherently distrust each other. Every node must independently validate the same set of transactions to achieve Byzantine fault tolerance, essentially performing redundant computations. This consensus requirement significantly hinders blockchain's execution parallelism and scalability compared to its traditional counterparts.
+
+Cluster-node architectures, as exemplified in \cite{SChain2023, BCOS2023, FlexChain2022, Fabric2018, Bidl2021, LineageChain2019, fabricSharp2020, FlexChain2022}, represent a significant trend in blockchain technology. By operating a cluster of servers as a single logical node, with all nodes within the cluster maintaining mutual trust, blockchain systems can achieve higher performance comparable to traditional distributed systems while preserving their original security assumptions. However, in the context of enhanced parallelism within a single logical node, previously inconsequential inefficiencies may manifest as significant performance bottlenecks, potentially impeding the overall system throughput.
+
+In prevailing blockchain architectures, the initiation of transaction execution within a given block is typically dependent upon the complete finalization of antecedent blocks. The synchronization of all transactions before completing formation often leads to inefficient use of computing resources. To simplify the analysis, assume that the execution time of a single transaction is a random variable \(X\) with an expected value \(\mu\) and variance \(\sigma^2\), and the number of transactions assigned to each thread is approximately a constant \(M\). According to the Central Limit Theorem, the relative difference between two independent threads \(p\) and \(q\) can be defined as \(\frac{Y_p - Y_q}{M\mu} \sim N\left(0, \frac{2\sigma^2}{M\mu^2}\right)\), which converges in probability to 0 when $M\to +\infty$. This implies that when the number of available threads in a single node is limited and the number of transactions assigned to each thread (i.e., \(M\)) is sufficiently large, there is minimal inter-thread waiting time, resulting in negligible idle time. However, in a clustered single-node environment with an increased number of available threads per node, this assumption no longer holds, necessitating the optimization of idle time to improve overall system efficiency. Figure \ref{fig:fragile-time} illustrates this point through a simple example. 
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{fragile-time-illus.pdf}}
+\caption{ Illustration of the increasing impact of idle time with more available threads in transaction execution.}
+\label{fig:fragile-time}
+\end{figure}
+
+To corroborate the aforementioned theoretical derivation, we constructed a blockchain system framework implementing a conventional inter-block parallel algorithm incorporating seams. We kept $N$ constant (defaulting to 100 transactions) and gradually increased the number of available threads to observe the variation in the proportion of idle time to the overall time. We define the total execution time $T_{i}$ of each transaction $t_{i}$ within a block as the duration including the last effective execution time and all previous ineffective execution times caused by conflicts with other transactions. The time taken for a block to complete all transactions effectively is denoted as $T$. Therefore, the relative thread idle time is defined as $\delta=1-\frac{1}{NT}\left(\sum_{i=1}^{N}T_{i}\right)$. As illustrated in Figure \ref{fig:idle-impact}, with the increase in available threads, $\delta$ gradually converges to a higher level, while its mean and median values demonstrate an upward trend. This indicates that our optimization is highly necessary.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{idle.pdf}}
+\caption{ Idle Time Impact with Increased Parallel Threads. }
+\label{fig:idle-impact}
+\end{figure}
+
+The synchronization of all transactions before block execution completion, while prevalent, primarily stems from implementation convenience rather than algorithmic necessity. High-parallelism blockchain systems essentially aim to achieve ``dependency preposition''. For instance, FISCO-BCOS\cite{BCOS2023} and SChain\cite{SChain2023} demonstrate that execution results (i.e., read-write sets) can be omitted before ordering. They define ``transactions included in the previous block'' as their inter-block dependency and utilize deterministic scheduling to ensure result consistency. By positioning consensus at the pipeline's inception, these systems enable earlier commencement of the next block's processing, achieving high inter-block parallelism.
+
+These methods, however, introduce another pipeline dependency: the necessity for complete execution of all transactions within a block prior to initiating the subsequent block's execution, owing to each block's reliance on the state snapshot generated upon its predecessor's completion. This dependency, however, is not absolute: subsequent block transactions may not necessarily conflict with those within the current block. During the synchronization of transactions within a block, as illustrated in Figure \ref{fig:fragile-time}, idle threads have the potential to optimistically execute transactions from the succeeding block. Consequently, we propose a Seamless Scheduling algorithm to capitalize on this opportunity.
+
+Our research reveals that transaction scheduling within a block invariably maintains a Directed Acyclic Graph (DAG) structure, either explicitly or implicitly, while identifying nodes with zero in-degree in the DAG. Systems like Schain\cite{SChain2023} and Monad\cite{Monad} employ static analysis to extract transaction DAGs and dispatch transactions accordingly. In contrast, other systems such as \cite{NeuChain2022, Fabric2018, fabricSharp2020, BlockSTM2023} identify transaction dependencies as conflicts arise during execution. In Block-STM\cite{BlockSTM2023}, the multi-versioned data structure effectively represents a series of directed edges in DAGs.
+
+In this paper, we introduces BachLedger, a high-performance blockchain, featuring Seamless Scheduling to optimize idle time between blocks. Our algorithm draws inspiration from the structure of Bach's fugue scores. Batches of transactions are individually encapsulated as blocks while being scheduled in a single queue to maximize overall efficiency. Prior to the complete formation of a block, transactions in subsequent blocks can be executed in advance if idle threads are available.
+
+In order to facilitate the scheduling of cross-block transactions within a single queue, we have devised a deterministic sequence number incorporating a semantic prefix as transactions' priority code. This innovative approach enables the uniform processing of priority codes across disparate blocks. Our approach eschews the implementation of a centralized component, instead leveraging hash values to establish transaction priorities. The inherent certainty and unpredictability of the hash function render it an ideal mechanism for achieving consensus on transaction priorities across a cluster, without necessitating complex consensus protocols.
+
+We have introduced a novel data structure, termed the ``Ownership Table'', which maintains a record of the transactions that possess ownership of specific data entries in storage. During each iteration, only those transactions that have exclusive ownership of all entries they intend to read or write are eligible for commitment. In essence, this table catalogues all nodes with zero in-degree within an implicit DAG at each iteration. Our algorithm is designed to extract all such transactions from an expanding queue in topological order.
+
+In summary, our research presents the following key contributions:
+
+\begin{itemize}
+    \item \textbf{Seamless Scheduling for Cluster-Node Job Dispatching:} We demonstrate the critical importance of utilizing idle computing resources between block processing procedures. Our novel protocol enables Seamless Scheduling of cross-block transactions within a unified queue, maximizing resource utilization.
+    \item \textbf{Ownership Table and Priority Codes for Dependency Management:} We introduce the Ownership Table, a sophisticated data structure, coupled with semantically prefixed sequence numbers as priority code. This innovation facilitates dynamic conflict detection and resolution among transactions, while concurrently constructing an implicit DAG. The Ownership Table efficiently records nodes with zero in-degree within this DAG.
+    \item \textbf{High-Performance Blockchain with Cluster-Node Architecture:} Leveraging these advancements, we have developed BachLedger, a high-performance blockchain system. Its cluster-node architecture significantly enhances parallelism capabilities. Our Seamless Scheduling mechanism endows BachLedger with substantial performance advantages over existing solutions.
+\end{itemize}
+
+\section{Related Work}
+
+In the realm of blockchain architecture, enhancing performance predominantly involves augmenting system parallelism, given the constraint of utilizing extant hardware infrastructure. Parallelism in this context can be conceptualized along two primary dimensions: firstly, the development of a distributed physical architecture to amplify the system's capacity for parallel processing; and secondly, the optimization of algorithms to incorporate more independent subroutines amenable to concurrent execution.
+
+\subsection{Inter-block Parallelism}
+
+The majority of traditional blockchain systems, particularly those utilizing Proof of Work (PoW) consensus mechanisms, implement an Ordering-Execution-validation (OEV) architecture. This architecture follows a three-step transaction processing paradigm: (1) transaction aggregation for block formation; (2) network-wide consensus on the composition of the subsequent block; and (3) transaction execution and state update by individual nodes after validation. To maintain consistency across the distributed ledger, the execution scheduling in the final step necessitates determinism. The most rudimentary approach involves delegating transaction execution to a single primary node, selected via the consensus protocol, or employing strictly sequential execution.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{oev-eov-compare.pdf}}
+\caption{ Comparison of OEV and EOV architecture. }
+\label{fig:eov-oev-cmp}
+\end{figure}
+
+In contrast, Fabric\cite{Fabric2018} introduces an execution-ordering-validation (EOV) architecture, aiming to facilitate parallel execution sequencing and systems like \cite{Chainmaker, FlexChain2022} follow this architecture. As shown in Figure \ref{fig:eov-oev-cmp}, EOV architecture cannot support high pipeline parallelism. Although systems like Fabric adapt optimistic execution, delayed storage snapshot updates result in high abortion rate. Nevertheless, the permissioned blockchains with OEV architecture including \cite{BCOS2023, NeuChain2022, SChain2023} demonstrates superior potential for enhanced inter-block parallelism, effectively enabling pipeline parallelism. Furthermore, recent advancements in deterministic parallel scheduling algorithms have significantly bolstered the overall parallelism capabilities of the OEV architecture, rendering it increasingly advantageous in terms of performance and scalability.
+
+\subsection{Critical Dependency Prepositioning}
+
+``Critical dependency'' refers to essential information from a preceding block or transaction necessary for determining its successor, whose determination lies on the critical path of the parallel workflow. This necessitates sequential generation of dependent information, such as block hash values or previous block execution results (snapshots). Critical dependencies are not absolute but rather algorithm-dependent. The key to enhancing inter-block parallelism in OEV architecture is ``critical dependency prepositioning''. This involves designing algorithms to determine critical dependency information earlier and eliminate unnecessary dependencies, thereby enabling earlier initiation of dependent processes.
+
+Ordering, as the initial phase of OEV architecture, inevitably lies on the critical path. Blockchains employing the OEV architecture, such as those presented in \cite{BCOS2023, NeuChain2022, SChain2023}, enhance inter-block parallelism by prioritizing the ordering phase at the outset of their processing pipeline. DispersedLedger\cite{yang2022dispersedledger} posits that consensus primarily ensures data consistency among participants, allowing for asynchronous content retrieval. Bidl isolates transaction ordering as the crucial consensus role, validating it through a parallel consensus process. The system proposed by \cite{wang2021weak}, designed for specific requirements, relaxes the constraint of maintaining absolute consistency in block ordering. These approaches fundamentally seek to eliminate superfluous critical dependencies while strategically prepositioning inevitable dependencies, thus enhancing parallelism.
+
+\subsection{Deterministic Scheduling}
+
+Deterministic scheduling must ensure deterministic serializability, wherein the effect of a transaction schedule is consistently equivalent to a specific serialized execution sequence. Two primary approaches exist: (1) utilizing static analyzers, such as Slither\cite{Slither}, to generate a Directed Acyclic Graph (DAG) a priori, and (2) dynamically detecting inter-transaction dependencies upon conflict occurrence. Monad\cite{Monad} employs static dependency analysis to construct a DAG for parallel execution, reverting to serialized execution when static analysis proves insufficient. Similarly, SChain\cite{SChain2023} requires a pre-generated DAG to coordinate transactions across disparate execution shards.
+
+The dynamic approach essentially maintains an implicit Directed Acyclic Graph (DAG) through alternative data structures. Systems proposed in \cite{BlockSTM2023, Fabric2018} employ tables containing versioned read-write results, effectively recording the directed edges of an implicit DAG. These algorithms iteratively identify nodes with zero in-degree within the DAG. Given the potential unreliability of static analysis and the necessity for serialized execution fallbacks in static-analysis-based schedules, deterministic scheduling has emerged as an increasingly preferable option in numerous scenarios.
+
+\subsection{Sharding}
+
+Sharding is essential for blockchain scalability. SlimChain enhances throughput by partitioning transactions for parallel processing, reducing computational load \cite{xu2021slimchain}, while Algorand uses Verifiable Random Functions (VRF) to improve consensus efficiency \cite{chen2016algorand}. SlimChain focuses on transaction optimization, and Algorand on consensus.
+
+Blockumulus brings sharding to cloud computing, enabling scalable decentralized smart contracts across transaction throughput, storage, and computation \cite{ivanov2021blockumulus}. Its overlay consensus uses cloud resources while maintaining decentralization. These approaches showcase sharding's flexibility in improving blockchain performance. The scheduling algorithm proposed in this paper can be applied to execution-layer sharding for task allocation and conflict resolution.
+
+\section{System Design}
+
+\subsection{Prerequisite and Assumption}
+
+The security model of our system is predicated on a distributed network of nodes deployed by multiple distinct organizations. Each organization maintains a cluster node, with intra-cluster nodes operating under a trust relationship, while inter-cluster interactions are characterized by mutual distrust. Throughout this discourse, the term ``node'' implicitly refers to a ``cluster node'', unless explicitly qualified as an ``execution node'', ``ordering node'', or other functionally specific sub-node within a cluster. A fundamental assumption underpinning our system's integrity is that the proportion of malicious or faulty nodes never exceeds one-third of the total node population. Formally, given a total of n cluster nodes, where $n > 3f + 1$, the number of Byzantine cluster nodes is strictly less than $f$. This assumption is crucial for the Byzantine Fault Tolerant (BFT) consensus algorithm employed in our consensus phase. Furthermore, the network topology is modeled as partially synchronous, wherein no theoretical upper bound on message delivery time exists. However, the model incorporates a Global Stabilization Time (GST), ensuring that system synchrony is inevitably restored post-GST in the event of temporary network perturbations or blockages.
+
+\subsection{BachLedger's Workflow}
+
+BachLedger is a blockchain system that employs the Optimistic Execution and Validation (OEV) algorithmic architecture. Its operational workflow comprises three primary phases: Ordering, Execution, Validation and then Storage as shown in Figure \ref{fig:overview}.
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=18cm]{system-overview.pdf}
+    \caption{The overall workflow of BachLedger.}
+    \label{fig:overview}
+\end{figure*}
+
+\paragraph{Ordering Phase} Ordering phase initiates with transactions being directed to a transaction pool, which facilitates transaction collection and flooding broadcast. Block creation is triggered either when the pool accumulates sufficient transactions or at predetermined intervals (default: 50 milliseconds) if the pool is non-empty. BachLedger utilizes TBFT as its consensus algorithm. Upon receiving a packaging signal, the consensus-elected primary node constructs a block and initiates network-wide consensus using TBFT. This process ensures network-wide agreement on a block containing an identical set of transactions. Consensually approved transactions are then queued for scheduling.
+
+\paragraph{Execution Phase} Each queued transaction receives a distinctive identifier that determines its execution priority. This identifier consists of two parts: a semantic prefix and a hash-derived value. The hash component ensures uniqueness, while the prefix maintains the order of cross-block transactions and tracks whether the data items owned by each transaction have been released. The scheduling algorithm leverages an Ownership Table to detect and manage conflicts, guaranteeing that conflicting transactions are confirmed in order of their identifier-based priority.
+
+\paragraph{Validation and Storage Phase} The Validation phase addresses potential non-compliance in transaction execution across nodes. Post-execution, nodes broadcast signatures and block hashes containing transaction results. Each node compares received block hashes with its local blocks, retaining signatures for matching blocks. A block requires signatures from over two-thirds of the nodes for validation. While this introduces a dependency, it is not on the critical path and does not bottleneck the system, as it does not impede subsequent pipeline processes.
+
+\section{Seamless Scheduling Protocol}
+
+\subsection{Ownership Table and Semantically-prefixed Priority Code}
+
+In this section, we elucidate the intricacies of the Seamless Scheduling protocol, which constitutes the core of our system design. The fundamental principle underlying this protocol is the iterative identification and collection of nodes with zero in-degree within the DAG. To facilitate this process, we have devised an Ownership Table that serves as a comprehensive record of these zero in-degree nodes. Through dependency detection in each iteration, these nodes are systematically identified and confirmed. The Ownership Table is strategically designed to enable the system to handle this logical process in a uniform and efficient manner.
+
+\begin{algorithm}
+\caption{Ownership Entry's Methods}
+\label{alg:tableLine}
+\begin{algorithmic}[1]
+% \State \textbf{attributes}
+% \State \quad owner: []byte
+% \Comment{current owner's priority code} 
+% \State \quad mutex: RWMutex 
+% \Comment{a read-write mutex for this line} 
+
+\State \textbf{const} DISOWNED $\gets$ 1
+\State \textbf{const} OWNED $\gets$ 0
+
+\Procedure{ReleaseOwnership}{self}
+    \State self.mutex.Lock()
+    \State \textbf{defer} self.mutex.Unlock()
+    \State self.owner[0] $\gets$ DISOWNED
+\EndProcedure
+
+\Procedure{CheckOwnership}{self, who}
+    \State self.mutex.RLock()
+    \State \textbf{defer} self.mutex.RUnlock()
+    \State \Return who $\leq$ self.owner
+\EndProcedure
+
+\Procedure{TrySetOwner}{self, who}
+    \If{\textbf{not} self.CheckOwnership(who)}
+        \State \Return false
+    \EndIf
+    \State self.mutex.Lock()
+    \State \textbf{defer} self.mutex.Unlock()
+    \If{who $\leq$ self.owner}
+        \State self.owner $\gets$ who
+        \State \Return true
+    \EndIf
+    \State \Return false
+\EndProcedure
+
+\end{algorithmic}
+\end{algorithm}
+
+The Ownership Table is conceptualized as a mapping structure wherein each storage key corresponds to its current owner's priority code. To maximize parallelism, we implement fine-grained read-write locks at the ownership entry level. Exclusive locks are used only for ownership modifications of specific storage keys, while shared locks suffice for reads. This ensures operations on one key's ownership do not impede access to others. The priority code, consisting of a sequence number with a semantic prefix, is comprised of three distinct components: (1) a single bit indicator denoting the release status of the ownership; (2) the transaction's block height; and (3) a hash-derived value computed from both the transaction itself and the encompassing block of transactions. Since adversaries cannot predict other transactions in a block, they cannot craft a hash value that is smaller than the others within the same block.
+
+In our design paradigm, the lowest numerical priority code is accorded the highest execution priority. Therefore, this structure ensures several key properties: firstly, the uniqueness of priority codes is guaranteed by the third field; secondly, transactions within the earliest block are prioritized for execution due to the second field. What's more, when transactions are confirmed and the release of ownership is necessitated, we employ a simple yet effective mechanism: the first bit of the corresponding record in the table is set to 1. This operation ensures that the released ownership's priority code becomes numerically larger than any other code currently in the waiting queue, effectively deprioritizing it. The priority mechanism and fine-grained mutex in the implementation of the ownership entry are illustrated in Algorithm \ref{alg:tableLine}.
+
+\subsection{Seamless Scheduling Design}
+
+After all transactions are packaged into blocks and reach consensus through the ordering stage, they are disassembled and merged into a common waiting queue. Specifically, transactions from different blocks are sorted using the same sequential rule, known as the semantically-prefixed priority code mentioned earlier. As illustrated in the Figure \ref{fig:algo-detail} and the Algorithm \ref{alg:seamless}, each arriving transaction is optimistically executed in advance. Within the critical section, conflicts among the transactions of the earliest unconfirmed block are processed. When a transaction conflict is detected, the lower-priority transaction is re-executed until the last transaction in the block is completed. At this point, transactions from the next block can enter the critical section.
+
+
+\begin{algorithm}
+\caption{Seamless Scheduling}
+\label{alg:seamless}
+\begin{algorithmic}[1]
+
+\State \textbf{Input:} Transactions $T$ in a block
+\State \textbf{Output:} Processed Transactions
+
+\Procedure{Schedule}{T}
+    \State $snapshot \gets \text{new snapshot}$
+    \State $Q_{s} \gets \text{new queue}$
+    \Comment{a queue of approved transactions}
+
+    \State $Q_{e} \gets \text{optimisticExecuteTxs}(block, snapshot)$
+
+    \State $\text{mu.Lock()}$
+    \State $\text{defer mu.Unlock()}$
+    \State $\text{updateSnapshot}()$
+
+    \While{$\text{len}(Q_{e}) > 0$}
+        \State $Q_{a} \gets \text{detectConflict}(Q_{e}, Q_{s}, snapshot)$
+        \State $Q_{e} \gets \text{reExecuteTxs}(block, Q_{a}, snapshot, Q_{s})$
+    \EndWhile
+    \State $blk \gets \text{formalizeBlock}(Q_{s})$
+    \State \Return $blk$
+\EndProcedure
+
+\Function{optimisticExecuteTxs}{block, snapshot}
+    \State $Q_{e} \gets \text{new queue}$
+    \Comment{a queue of executed transactions}
+    \ForAll{$tx \in block.txs$ \textbf{parallel}}
+        \State $hashField \gets \text{hash}(tx, \text{hash}(block.txs))$
+        \State $tx.priority \gets \text{join}(0, block.height, hashFiled)$
+        \State $tx.rset, tx.wset \gets \text{execute}(tx, snapshot)$
+        \ForAll{$w \in tx.wset$}
+            \State table[w.key].TrySetOwner(tx.priority)
+        \EndFor
+        \State $\text{append}(Q_{e}, tx)$
+    \EndFor
+    \State \textbf{Synchronize with all threads}
+    \State \Return $Q_{e}$
+\EndFunction
+
+
+\Function{detectConflict}{$Q_{e}$, $Q_{s}$, snapshot}
+    \State $Q_{a} \gets \text{new queue}$
+    \Comment{a queue of aborted transactions}
+    \ForAll{$tx \in Q_{e}$ \textbf{parallel}}
+        \State $\text{handleConflictDetection}(tx, Q_{a}, Q_{s})$
+    \EndFor
+    \State \textbf{Synchronize with all threads}
+    \State \Return $Q_{a}$
+\EndFunction
+
+\Function{handleConflictDetection}{$tx, Q_{a}, Q_{s}$}
+    \ForAll{$w \in tx.wset$}
+        \If{$table[w.key].\text{CheckOwnership}(tx.priority) = false$}
+            \State $\text{append}(Q_{a}, tx)$
+            \State \Return
+        \EndIf
+    \EndFor
+    \ForAll{$r \in tx.rset$}
+        \If{$table[r.key].\text{CheckOwnership}(tx.priority) = false$}
+            \State $\text{append}(Q_{a}, tx)$
+            \State \Return
+        \EndIf
+    \EndFor
+    \State $\text{append}(Q_{s}, tx)$
+\EndFunction
+
+\Function{reExecuteTxs}{block, $Q_{a}$, snapshot, $Q_{s}$}
+    \State $Q_{e} \gets \text{new queue}$
+    \ForAll{$tx \in Q_{a}$ \textbf{parallel}}
+        \State $tx.rset, tx.wset \gets \text{execute}(tx, snapshot)$
+        \ForAll{$w \in tx.wset$}
+            \State table[w.key].TrySetOwner(tx.priority)
+        \EndFor
+        $\text{append}(Q_{e}, tx)$
+    \EndFor
+    \State \textbf{Synchronize with all threads}
+    \State \Return $Q_{e}$
+\EndFunction
+
+\end{algorithmic}
+\end{algorithm}
+
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{seamless-schedule.pdf}}
+\caption{ A detailed illustration of Seamless Scheduling. }
+\label{fig:algo-detail}
+\end{figure}
+
+In both the optimistic execution and re-execution phases, transactions are processed similarly, except for the attachment of the priority code during optimistic execution. In these two phases, a coordinator dispatches transactions to threads in different executors for parallel execution and synchronizes to obtain all the complete read-write sets. The coordinator iterates through the entire write set to attempt to acquire the corresponding ownership. During the conflict detection phase, the read-write set of each transaction from the previous execution phase is rechecked to verify whether the transaction holds all the storage keys it needs to read and write by comparing their priority codes with the owner fields in the entry. Transactions that fail the conflict check, i.e., those that do not obtain ownership of all necessary storage keys, are added to a list for re-execution in the next round.
+
+% \begin{algorithm}
+% \caption{Ordered Mutex's Methods}
+% \label{alg:orderedmutex}
+% \begin{algorithmic}[1]
+% % \State \textbf{attributes}
+% % \State \quad owner: []byte
+% % \Comment{current owner's priority code} 
+% % \State \quad mutex: RWMutex 
+% % \Comment{a read-write mutex for this line} 
+
+% \State \textbf{const} DISOWNED $\gets$ 1
+% \State \textbf{const} OWNED $\gets$ 0
+
+% \Procedure{New}{}
+%     \State $om \gets  \text{new ordered mutex}$
+%     \State $\text{om.current} \gets 1$
+%     \State $\text{om.queue} \gets \text{new map}$
+% \EndProcedure
+
+% \Procedure{Lock}{self, id}
+%     \State self.mutex.Lock()
+%     \If $id = \text{self.current}$
+%         \State self.mutex.Unluck()
+%     \EndIf
+%     \State $ch \gets \text{new condition variable}$
+%     \State $\text{self.queue[}id\text{]}\gets ch$
+%     \State self.mutex.Unluck()
+%     \State $ch.\text{wait()}$
+% \EndProcedure
+    
+% \Procedure{Unlock}{self, id}
+%     \State self.mutex.Lock()
+%     \State $\text{self.current}++$
+%     \If{self.queue.contains(id)}
+%         \State close(self.queue[id])
+%     \EndIf
+%     \State self.mutex.Unluck()
+% \EndProcedure
+
+% \end{algorithmic}
+% \end{algorithm}
+
+\section{Experiment}
+
+Our system primarily aims to address the impact on resource efficiency as the number of parallel threads increases. Additionally, we have adopted the OEV architecture, as our research indicates its capacity to achieve higher pipeline parallelism. To validate our theoretical derivations, assess end-to-end performance, and evaluate system scalability, we have conducted a comprehensive series of experiments. Through these investigations, we seek to answer the following research questions:
+
+\begin{itemize}
+    \item Does our theoretical derivation hold true: as the number of available threads increases, does the proportion of idle time also increase?
+    \item Can our proposed BachLedger using Seamless Scheduling solve the fragmented time issue derived from our theoretical analysis?
+    \item Can our proposed BachLedger achieve and surpass the SOTA level in overall performance as the number of available threads increases?
+\end{itemize}
+
+\subsection{Experiment Setup}
+
+\paragraph{Baseline} As previously elucidated, we have opted for the OEV architecture due to its inherent potential for enhanced parallelism. BachLedger further augments this parallelism through the implementation of Seamless Scheduling in its execution phase. To rigorously evaluate the efficacy of our approach, we conduct a comprehensive comparative analysis. Specifically, we benchmark BachLedger against two prominent blockchain systems:
+\begin{itemize}
+    \item ChainMaker \cite{Chainmaker}: A widely adopted consortium blockchain leveraging the EOV architecture.
+    \item FISCO-BCOS \cite{BCOS2023}: A state-of-the-art consortium blockchain solution, exemplifying the OEV architecture. In this study, we utilize its lightweight Air version.
+\end{itemize}
+This comparative framework allows us to assess the performance improvements achieved by BachLedger, not only against a different architectural approach (EOV) but also against a leading implementation within the same architectural category (OEV). Through this analysis, we aim to demonstrate the superior parallelism and efficiency of BachLedger in relation to both established and cutting-edge blockchain systems.
+
+\paragraph{Physical Environment and Deployment} This study utilized an Inspur NF5280M5 server, featuring dual Intel Xeon Gold 5218 processors (2.30 GHz base frequency). The system leverages Hyper-Threading technology to provide 64 logical cores and incorporates 64 GB of RAM. In the context of this study, four ordering nodes are deployed as a standard configuration. To rigorously assess the impact of thread availability on the performance of execution nodes, we strategically manipulate the number of accessible cores on the server using Linux Control Groups. This method enables precise and consistent control over resource allocation across different framework designs, allowing for a detailed analysis of scalability and efficiency in managing varying computational loads.
+
+\paragraph{Workload} In our experiments, we utilized the ERC-20 token transfer scenario as the primary workload, involving transactions that require simultaneous read and write operations on identical accounts. We initialized 100 accounts, each with sufficient approved tokens, and generated a randomized set of transfers among these accounts. The stochastic nature of the transaction sequence introduces random conflicts, resulting in variable lifecycle durations for each transaction from initial execution to final conflict-free execution. Consequently, heterogeneous execution times generate fragmented thread idle time between blocks. This simulation methodology effectively evaluates our proposed Seamless Scheduling mechanism.
+
+
+\subsection{End-to-end Performance Experience}
+
+As illustrated in Figure \ref{fig:performance}, we conducted comparative experiments using ChainMaker, FISCO-BCOS, and BachLedger under controlled conditions. The experiments were standardized with a block size of 100 and 64 available threads. Furthermore, we included the optimal configuration of FISCO-BCOS (block size 1000) in our environment for comprehensive comparison. In comparison to ChainMaker, BachLedger demonstrates a significant performance advantage due to its utilization of the OEV architecture, which enables full parallelization of consensus and other procedural steps. In contrast, ChainMaker, which employs an EOV architecture, necessitates the completion of block execution prior to reaching consensus on blocks containing execution results, in order to ensure deterministic outcomes.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{end-to-end-perf.pdf}}
+\caption{End-to-end performance distribution comparison. }
+\label{fig:performance}
+\end{figure}
+
+In the comparison with FISCO-BCOS, BachLedger achieves enhanced performance through the optimization of thread idle time. In extreme scenarios where a block contains transactions exclusively related to a single account, these transactions can only be executed sequentially due to logical constraints. Encountering such situations, FISCO-BCOS must wait for synchronization, thereby generating fragmented thread idle time, BachLedger allows subsequent blocks to utilize these idle resources efficiently. This optimization strategy enables BachLedger to maintain high performance even in challenging scenarios, further distinguishing it from existing high-performance blockchain systems.
+
+\subsection{Scalability Experience}
+
+This section evaluates the efficacy of our Seamless Scheduling design in enhancing system scalability. Our research reveals an optimal block size exists, as both excessive and insufficient sizes impair system performance. This optimum varies across blockchain implementations due to diverse algorithms and pipeline parallelization designs. We examine system efficiency, measured by throughput, as parallel computing resources increase. To ensure fair comparison across resource conditions, we introduce $\rho$, the ratio of available hardware cores to transactions per block, quantifying relative resource abundance. Figure \ref{fig:scalability} illustrates BachLedger's throughput as a function of $\rho$, demonstrating significant performance scaling with increased resource availability and evidencing BachLedger's efficient utilization of additional computational resources.
+
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\linewidth]{blk-comp.pdf}}
+\caption{ Throughput distribution comparison at varying $\rho$. }
+\label{fig:scalability}
+\end{figure}
+
+It is worth noting that BachLedger's Seamless Scheduling exploits fragmented idle resources arising from stochastic transaction execution times, resulting in probabilistic performance gains. While abundant resources increase the likelihood of achieving higher throughput, the performance lower bound remains constrained by inter-transaction dependencies.
+
+\section{Conclusion}
+
+Our theoretical and empirical investigations reveal that, with the increasing parallel computing capacity of blockchain nodes, the proportion of thread idle time resulting from intra-block synchronous execution is growing substantially, significantly impacting overall performance. This paper presents BachLedger, which introduces a novel Seamless Scheduling algorithm to efficiently harness these fragmented computational resources. Experimental results demonstrate that BachLedger's implementation of this algorithm yields substantial performance improvements over current state-of-the-art solutions.
+
+
+\printbibliography
+
+% \vspace{12pt}
+% \color{red}
+% IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
+
+\end{document}

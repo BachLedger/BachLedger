@@ -1,0 +1,107 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.accesscontrol";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/accesscontrol";
+
+package accesscontrol;
+
+// online member of blockchain
+message Member {
+    // organization identifier of the member
+    string org_id = 1;
+
+    // member type
+    MemberType member_type = 2;
+
+    // member identity related info bytes
+    bytes member_info = 3;
+}
+
+// full attribute member of blockchain
+message MemberFull {
+    // organization identifier of the member
+    string org_id = 1;
+
+    // member type
+    MemberType member_type = 2;
+
+    // member identity related info bytes
+    bytes member_info = 3;
+
+    // the identity of this member (non-uniqueness)
+    string member_id = 4;
+
+    // role of this member
+    string role = 5;
+
+    // the identity of this member (unique)
+    string uid = 6;
+}
+
+enum MemberType {
+    //X509 cert
+    CERT = 0;
+    //cert hash
+    CERT_HASH = 1;
+    //public key
+    PUBLIC_KEY = 2;
+    //did
+    DID = 3;
+    //alias
+    ALIAS = 4;
+    //address
+    ADDR = 5;
+}
+// member extra data
+message MemberExtraData{
+    // sequence, like ethereum account nonce, by default is 0
+    uint64  sequence=1;
+    //others
+}
+
+message MemberAndExtraData{
+    Member member=1;
+    MemberExtraData extra_data=2;
+}
+// member status
+enum MemberStatus {
+    //member's status is normal
+    NORMAL = 0;
+
+    //member's status is invalid
+    INVALID = 1;
+
+    //member's status is revoked
+    REVOKED = 2;
+
+    //member's status is frozen
+    FROZEN = 3;
+
+}
+
+// verify the member's relevant identity material type
+enum VerifyType {
+
+    //CRL
+    CRL = 0;
+
+}
+
+// public key member's info
+message PKInfo {
+    // the der of the public key
+    bytes pk_bytes = 1;
+
+    // member role
+    string role = 2;
+
+    // member's org_id
+    string org_id = 3;
+}

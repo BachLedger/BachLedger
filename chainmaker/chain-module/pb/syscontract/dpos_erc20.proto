@@ -1,0 +1,39 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of DPoS ERC20 contract
+enum DPoSERC20Function {
+    // get owner of DPoS
+    GET_OWNER = 0;
+    // get decimals of DPoS
+    GET_DECIMALS = 1;
+    // transfer token at DPoS
+    TRANSFER = 2;
+    // transfer token from user at DPoS
+    TRANSFER_FROM = 3;
+    // get balance of user at DPoS
+    GET_BALANCEOF = 4;
+    // approve token for user to other user at DPoS
+    APPROVE = 5;
+    // get allowance at DPoS
+    GET_ALLOWANCE = 6;
+    // burn token at DPoS
+    BURN = 7;
+    // mint token at DPoS
+    MINT = 8;
+    // transfer owner ship at DPoS
+    TRANSFER_OWNERSHIP = 9;
+    // get total supply of tokens
+    GET_TOTAL_SUPPLY = 10;
+}

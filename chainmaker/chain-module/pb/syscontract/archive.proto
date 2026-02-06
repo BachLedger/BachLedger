@@ -1,0 +1,33 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of archive block
+enum ArchiveFunction {
+    ARCHIVE_BLOCK = 0;
+    RESTORE_BLOCK = 1;
+}
+
+// archive block payload parameters
+message ArchiveBlock {
+    enum Parameter {
+        BLOCK_HEIGHT = 0;
+    }
+}
+
+// restore block payload parameters
+message RestoreBlock {
+    enum Parameter {
+        FULL_BLOCK = 0;
+    }
+}

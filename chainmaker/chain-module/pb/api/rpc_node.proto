@@ -1,0 +1,74 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.api";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/api";
+
+package api;
+
+import "common/request.proto";
+import "common/result.proto";
+import "config/local_config.proto";
+import "config/log_config.proto";
+import "config/chainmaker_server.proto";
+import "google/api/annotations.proto";
+import "txpool/transaction_pool.proto";
+
+// rpcNnode is the server API for
+service RpcNode {
+
+	// processing transaction message requests
+	rpc SendRequest(common.TxRequest) returns (common.TxResponse) {
+		option (google.api.http) = {
+            post: "/v1/sendrequest"
+            body: "*"
+        };
+	};
+
+	// processing requests for message subscription
+	rpc Subscribe(common.TxRequest) returns (stream common.SubscribeResult) {};
+
+	// processing requests for message subscription by websocket
+	rpc SubscribeWS(common.RawTxRequest) returns (stream common.SubscribeResult) {
+		option (google.api.http) = {
+            get: "/v1/subscribe"
+        };
+	};
+
+	// update debug status (development debugging)
+	rpc UpdateDebugConfig(config.DebugConfigRequest) returns (config.DebugConfigResponse) {};
+
+	// refreshLogLevelsConfig
+	rpc RefreshLogLevelsConfig(config.LogLevelsRequest) returns (config.LogLevelsResponse) {};
+
+	// get chainmaker version
+	rpc GetChainMakerVersion(config.ChainMakerVersionRequest) returns(config.ChainMakerVersionResponse) {
+		option (google.api.http) = {
+            get: "/v1/getversion"
+        };
+	};
+
+	// check chain configuration and load new chain dynamically
+	rpc CheckNewBlockChainConfig(config.CheckNewBlockChainConfigRequest) returns (config.CheckNewBlockChainConfigResponse) {};
+
+	// GetPoolStatus Returns the max size of config transaction pool and common transaction pool,
+	// the num of config transaction in queue and pendingCache,
+	// and the the num of common transaction in queue and pendingCache.
+	rpc	GetPoolStatus(txpool.GetPoolStatusRequest) returns (txpool.TxPoolStatus) {};
+
+	// GetTxIdsByTypeAndStage Returns config or common txIds in different stage.
+	// TxType may be TxType_CONFIG_TX, TxType_COMMON_TX, (TxType_CONFIG_TX|TxType_COMMON_TX)
+	// TxStage may be TxStage_IN_QUEUE, TxStage_IN_PENDING, (TxStage_IN_QUEUE|TxStage_IN_PENDING)
+	rpc	GetTxIdsByTypeAndStage(txpool.GetTxIdsByTypeAndStageRequest) returns (txpool.GetTxIdsByTypeAndStageResponse) {};
+
+	// GetTxsInPoolByTxIds Retrieve the transactions by the txIds from the txPool,
+	// return transactions in the txPool and txIds not in txPool.
+	// default query upper limit is 1w transaction, and error is returned if the limit is exceeded.
+	rpc	GetTxsInPoolByTxIds(txpool.GetTxsInPoolByTxIdsRequest) returns (txpool.GetTxsInPoolByTxIdsResponse) {};
+}
