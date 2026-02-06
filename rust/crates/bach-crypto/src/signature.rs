@@ -192,6 +192,8 @@ mod tests {
     use k256::ecdsa::SigningKey;
     use rand::rngs::OsRng;
 
+    // ==================== Basic sign/verify tests ====================
+
     #[test]
     fn test_sign_and_verify() {
         let private_key = SigningKey::random(&mut OsRng);
@@ -229,15 +231,17 @@ mod tests {
         let address = public_key_to_address(public_key);
 
         // Address should be 20 bytes
-        assert!(!address.is_zero() || true); // May be zero by chance, but unlikely
+        assert_eq!(address.as_bytes().len(), 20);
     }
+
+    // ==================== EIP-2 low-s signature malleability tests ====================
 
     #[test]
     fn test_low_s_enforcement() {
         // Create multiple signatures and verify they all have low-s
-        for _ in 0..10 {
+        for _ in 0..20 {
             let private_key = SigningKey::random(&mut OsRng);
-            let message_hash = keccak256(b"test");
+            let message_hash = keccak256(b"EIP-2 low-s test");
             let signature = sign(&message_hash, &private_key).unwrap();
             assert!(signature.is_low_s(), "All signatures must have low-s");
         }
@@ -256,5 +260,418 @@ mod tests {
 
         // Verification should fail for high-s signature
         assert!(!verify(&message_hash, &signature, public_key).unwrap());
+    }
+
+    #[test]
+    fn test_signature_s_boundary() {
+        // Test that s is strictly <= n/2
+        for _ in 0..10 {
+            let private_key = SigningKey::random(&mut OsRng);
+            let message_hash = keccak256(b"boundary test");
+            let signature = sign(&message_hash, &private_key).unwrap();
+
+            // s should be <= n/2
+            let cmp = compare_bytes(&signature.s, &SECP256K1_N_DIV_2);
+            assert!(
+                cmp != std::cmp::Ordering::Greater,
+                "s should be <= n/2"
+            );
+        }
+    }
+
+    #[test]
+    fn test_signature_components_not_zero() {
+        for _ in 0..10 {
+            let private_key = SigningKey::random(&mut OsRng);
+            let message_hash = keccak256(b"zero component test");
+            let signature = sign(&message_hash, &private_key).unwrap();
+
+            assert_ne!(signature.r, [0u8; 32], "r should not be zero");
+            assert_ne!(signature.s, [0u8; 32], "s should not be zero");
+        }
+    }
+
+    // ==================== Sign/verify/recover roundtrip tests ====================
+
+    #[test]
+    fn test_sign_verify_recover_roundtrip() {
+        for _ in 0..10 {
+            let private_key = SigningKey::random(&mut OsRng);
+            let public_key = private_key.verifying_key();
+            let expected_address = public_key_to_address(public_key);
+
+            let message_hash = keccak256(b"roundtrip test");
+            let signature = sign(&message_hash, &private_key).unwrap();
+
+            // Verify
+            assert!(verify(&message_hash, &signature, public_key).unwrap());
+
+            // Recover
+            let recovered_pubkey = recover_public_key(&message_hash, &signature).unwrap();
+            let recovered_address = public_key_to_address(&recovered_pubkey);
+
+            assert_eq!(expected_address, recovered_address);
+        }
+    }
+
+    #[test]
+    fn test_multiple_messages_same_key() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let public_key = private_key.verifying_key();
+
+        let messages: &[&[u8]] = &[
+            b"message 1",
+            b"message 2",
+            b"message 3",
+            b"",
+            &[0u8; 100],
+        ];
+
+        for msg in messages {
+            let hash = keccak256(msg);
+            let sig = sign(&hash, &private_key).unwrap();
+            assert!(verify(&hash, &sig, public_key).unwrap());
+        }
+    }
+
+    // ==================== Recovery ID tests ====================
+
+    #[test]
+    fn test_recovery_id_values() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let message_hash = keccak256(b"recovery id test");
+        let signature = sign(&message_hash, &private_key).unwrap();
+
+        // v should be 27 or 28 (Ethereum format)
+        assert!(
+            signature.v == 27 || signature.v == 28,
+            "v should be 27 or 28, got {}",
+            signature.v
+        );
+
+        // recovery_id() should return 0 or 1
+        let rec_id = signature.recovery_id();
+        assert!(rec_id <= 1, "recovery_id should be 0 or 1, got {}", rec_id);
+    }
+
+    #[test]
+    fn test_recovery_id_consistency() {
+        for _ in 0..10 {
+            let private_key = SigningKey::random(&mut OsRng);
+            let message_hash = keccak256(b"consistency test");
+            let signature = sign(&message_hash, &private_key).unwrap();
+
+            // Test both v formats
+            if signature.v >= 27 {
+                assert_eq!(signature.recovery_id(), signature.v - 27);
+            } else {
+                assert_eq!(signature.recovery_id(), signature.v);
+            }
+        }
+    }
+
+    // ==================== Signature serialization tests ====================
+
+    #[test]
+    fn test_signature_to_bytes_roundtrip() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let message_hash = keccak256(b"serialization test");
+        let signature = sign(&message_hash, &private_key).unwrap();
+
+        let bytes = signature.to_bytes();
+        assert_eq!(bytes.len(), 65);
+
+        let recovered = Signature::from_bytes(&bytes);
+        assert_eq!(signature.r, recovered.r);
+        assert_eq!(signature.s, recovered.s);
+        assert_eq!(signature.v, recovered.v);
+    }
+
+    #[test]
+    fn test_signature_new() {
+        let r = [0x11; 32];
+        let s = [0x22; 32];
+        let v = 27u8;
+
+        let sig = Signature::new(r, s, v);
+        assert_eq!(sig.r, r);
+        assert_eq!(sig.s, s);
+        assert_eq!(sig.v, v);
+    }
+
+    #[test]
+    fn test_signature_equality() {
+        let r = [0x11; 32];
+        let s = [0x22; 32];
+
+        let sig1 = Signature::new(r, s, 27);
+        let sig2 = Signature::new(r, s, 27);
+        let sig3 = Signature::new(r, s, 28);
+
+        assert_eq!(sig1, sig2);
+        assert_ne!(sig1, sig3);
+    }
+
+    // ==================== Verification failure tests ====================
+
+    #[test]
+    fn test_verify_wrong_message() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let public_key = private_key.verifying_key();
+
+        let message_hash = keccak256(b"original message");
+        let signature = sign(&message_hash, &private_key).unwrap();
+
+        let wrong_hash = keccak256(b"different message");
+        assert!(!verify(&wrong_hash, &signature, public_key).unwrap());
+    }
+
+    #[test]
+    fn test_verify_wrong_public_key() {
+        let private_key1 = SigningKey::random(&mut OsRng);
+        let private_key2 = SigningKey::random(&mut OsRng);
+        let public_key2 = private_key2.verifying_key();
+
+        let message_hash = keccak256(b"test message");
+        let signature = sign(&message_hash, &private_key1).unwrap();
+
+        // Verification with wrong key should fail
+        assert!(!verify(&message_hash, &signature, public_key2).unwrap());
+    }
+
+    #[test]
+    fn test_verify_tampered_signature_r() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let public_key = private_key.verifying_key();
+
+        let message_hash = keccak256(b"tamper test");
+        let mut signature = sign(&message_hash, &private_key).unwrap();
+
+        // Tamper with r
+        signature.r[0] ^= 0x01;
+
+        // Verification should fail or return an error
+        let result = verify(&message_hash, &signature, public_key);
+        assert!(result.is_err() || !result.unwrap());
+    }
+
+    #[test]
+    fn test_verify_tampered_signature_s() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let public_key = private_key.verifying_key();
+
+        let message_hash = keccak256(b"tamper test");
+        let mut signature = sign(&message_hash, &private_key).unwrap();
+
+        // Tamper with s (but keep it low to pass the EIP-2 check)
+        signature.s[31] ^= 0x01;
+
+        // Verification should fail
+        let result = verify(&message_hash, &signature, public_key);
+        assert!(result.is_err() || !result.unwrap());
+    }
+
+    // ==================== Recovery failure tests ====================
+
+    #[test]
+    fn test_recover_invalid_recovery_id() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let message_hash = keccak256(b"recovery test");
+        let mut signature = sign(&message_hash, &private_key).unwrap();
+
+        // Set invalid recovery ID
+        signature.v = 30; // Invalid: should be 27 or 28
+
+        let result = recover_public_key(&message_hash, &signature);
+        assert!(result.is_err());
+        // Accept either InvalidRecoveryId or RecoveryFailed error
+        match result {
+            Err(CryptoError::InvalidRecoveryId(_)) => {}
+            Err(CryptoError::RecoveryFailed(_)) => {}
+            Err(e) => panic!("Expected InvalidRecoveryId or RecoveryFailed, got {:?}", e),
+            Ok(_) => panic!("Expected error"),
+        }
+    }
+
+    #[test]
+    fn test_recover_tampered_signature() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let original_pubkey = private_key.verifying_key();
+        let original_address = public_key_to_address(original_pubkey);
+
+        let message_hash = keccak256(b"recovery tamper test");
+        let mut signature = sign(&message_hash, &private_key).unwrap();
+
+        // Tamper with r
+        signature.r[15] ^= 0xff;
+
+        // Recovery might succeed but return wrong public key
+        if let Ok(recovered) = recover_public_key(&message_hash, &signature) {
+            let recovered_address = public_key_to_address(&recovered);
+            assert_ne!(original_address, recovered_address);
+        }
+        // Or it might fail, which is also acceptable
+    }
+
+    // ==================== Address derivation tests ====================
+
+    #[test]
+    fn test_address_from_known_private_key() {
+        // Known test vector
+        // Private key: 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        let pk_bytes = hex::decode(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ).unwrap();
+
+        let private_key = SigningKey::from_slice(&pk_bytes).unwrap();
+        let public_key = private_key.verifying_key();
+        let address = public_key_to_address(public_key);
+
+        // The address derived from this key should be consistent
+        let address_hex = address.to_hex();
+        assert!(address_hex.starts_with("0x"));
+        assert_eq!(address_hex.len(), 42); // "0x" + 40 hex chars
+    }
+
+    #[test]
+    fn test_address_determinism() {
+        let pk_bytes = hex::decode(
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        ).unwrap();
+
+        let private_key = SigningKey::from_slice(&pk_bytes).unwrap();
+        let public_key = private_key.verifying_key();
+
+        let address1 = public_key_to_address(public_key);
+        let address2 = public_key_to_address(public_key);
+
+        assert_eq!(address1, address2);
+    }
+
+    // ==================== Edge cases ====================
+
+    #[test]
+    fn test_sign_zero_hash() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let public_key = private_key.verifying_key();
+
+        let zero_hash = H256::ZERO;
+        let result = sign(&zero_hash, &private_key);
+
+        // Should succeed
+        assert!(result.is_ok());
+        let signature = result.unwrap();
+
+        // Should be verifiable
+        assert!(verify(&zero_hash, &signature, public_key).unwrap());
+    }
+
+    #[test]
+    fn test_sign_max_hash() {
+        let private_key = SigningKey::random(&mut OsRng);
+        let public_key = private_key.verifying_key();
+
+        let max_hash = H256::from_bytes([0xff; 32]);
+        let result = sign(&max_hash, &private_key);
+
+        // Should succeed
+        assert!(result.is_ok());
+        let signature = result.unwrap();
+
+        // Should be verifiable
+        assert!(verify(&max_hash, &signature, public_key).unwrap());
+    }
+
+    // ==================== Known Ethereum test vectors ====================
+
+    #[test]
+    fn test_ethereum_personal_sign_format() {
+        // Ethereum "personal_sign" prefix
+        let message = b"Hello, Ethereum!";
+        let prefix = format!("\x19Ethereum Signed Message:\n{}", message.len());
+        let mut data = prefix.into_bytes();
+        data.extend_from_slice(message);
+
+        let hash = keccak256(&data);
+
+        // The hash should be 32 bytes and deterministic
+        assert_eq!(hash.as_bytes().len(), 32);
+
+        // Hash should be consistent
+        let hash2 = keccak256(&data);
+        assert_eq!(hash, hash2);
+    }
+
+    #[test]
+    fn test_known_private_key_address_derivation() {
+        // Well-known test private key (DO NOT USE IN PRODUCTION)
+        // This is the "test test test..." mnemonic first account
+        let pk_hex = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+        let pk_bytes = hex::decode(pk_hex).unwrap();
+
+        let private_key = SigningKey::from_slice(&pk_bytes).unwrap();
+        let public_key = private_key.verifying_key();
+        let address = public_key_to_address(public_key);
+
+        // Expected address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+        assert_eq!(
+            address.to_hex(),
+            "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+        );
+    }
+
+    // ==================== Helper function tests ====================
+
+    #[test]
+    fn test_compare_bytes() {
+        let a = [0u8; 32];
+        let b = [0u8; 32];
+        assert_eq!(compare_bytes(&a, &b), std::cmp::Ordering::Equal);
+
+        let mut c = [0u8; 32];
+        c[0] = 1;
+        assert_eq!(compare_bytes(&c, &a), std::cmp::Ordering::Greater);
+        assert_eq!(compare_bytes(&a, &c), std::cmp::Ordering::Less);
+
+        let mut d = [0u8; 32];
+        d[31] = 1;
+        assert_eq!(compare_bytes(&d, &a), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_subtract_from_n() {
+        // n - 0 = n
+        let zero = [0u8; 32];
+        let result = subtract_from_n(&zero);
+        assert_eq!(result, SECP256K1_N);
+
+        // n - 1 = n - 1
+        let mut one = [0u8; 32];
+        one[31] = 1;
+        let result = subtract_from_n(&one);
+        let mut expected = SECP256K1_N;
+        expected[31] -= 1;
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_is_low_s() {
+        // s = 0 should be low-s
+        let sig_zero_s = Signature::new([0; 32], [0; 32], 27);
+        assert!(sig_zero_s.is_low_s());
+
+        // s = n/2 should be low-s (boundary)
+        let sig_half_n = Signature::new([0; 32], SECP256K1_N_DIV_2, 27);
+        assert!(sig_half_n.is_low_s());
+
+        // s > n/2 should not be low-s
+        let mut high_s = SECP256K1_N_DIV_2;
+        high_s[31] += 1;
+        let sig_high_s = Signature::new([0; 32], high_s, 27);
+        assert!(!sig_high_s.is_low_s());
+
+        // s = max value should not be low-s
+        let sig_max = Signature::new([0; 32], [0xff; 32], 27);
+        assert!(!sig_max.is_low_s());
     }
 }

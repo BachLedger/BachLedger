@@ -1,0 +1,23 @@
+[package]
+name = "bach-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core orchestration for BachLedger"
+
+[dependencies]
+bach-primitives.workspace = true
+bach-types.workspace = true
+bach-crypto.workspace = true
+bach-storage.workspace = true
+bach-evm.workspace = true
+bach-scheduler.workspace = true
+bach-consensus.workspace = true
+bach-network.workspace = true
+bach-txpool.workspace = true
+bach-metrics.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+anyhow.workspace = true

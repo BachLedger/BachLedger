@@ -1,0 +1,19 @@
+[package]
+name = "bach-types"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core types (Transaction, Block, etc.) for BachLedger"
+
+[dependencies]
+bach-primitives.workspace = true
+bach-crypto.workspace = true
+bach-rlp.workspace = true
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+bytes.workspace = true
+
+[features]
+default = []
+serde = ["dep:serde", "bach-primitives/serde"]

@@ -1,0 +1,15 @@
+[package]
+name = "bach-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Storage layer (RocksDB) for BachLedger"
+
+[dependencies]
+bach-primitives.workspace = true
+bach-metrics.workspace = true
+rocksdb.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true

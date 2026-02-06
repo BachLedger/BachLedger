@@ -1,0 +1,16 @@
+[package]
+name = "bach-network"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "P2P networking for BachLedger"
+
+[dependencies]
+bach-primitives.workspace = true
+bach-metrics.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+bytes.workspace = true
+serde.workspace = true
