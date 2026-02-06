@@ -1,0 +1,13 @@
+[package]
+name = "bach-rlp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "RLP encoding/decoding for BachLedger"
+
+[dependencies]
+bach-primitives = { workspace = true, features = ["rlp"] }
+rlp.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
