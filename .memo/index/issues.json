@@ -1,0 +1,250 @@
+{
+  "issues": [
+    {
+      "tags": ["design-decision", "security"],
+      "title": "EIP-2 low-s signature normalization enforced",
+      "description": "All signatures are normalized to have s <= n/2 (where n is the secp256k1 curve order). This prevents signature malleability attacks where an attacker could create a valid alternate signature by computing s' = n - s. The sign() function automatically normalizes, and verify() rejects any signature with high-s. Constants SECP256K1_N and SECP256K1_N_DIV_2 are defined for this comparison.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-crypto/src/signature.rs",
+          "keyword": "SECP256K1_N_DIV_2",
+          "line": 10
+        },
+        {
+          "file": "rust/crates/bach-crypto/src/signature.rs",
+          "keyword": "is_low_s",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision"],
+      "title": "Ethereum-compatible v values (27/28) instead of raw recovery ID (0/1)",
+      "description": "The Signature struct stores v as 27 or 28 rather than raw 0 or 1, matching Ethereum's convention. The recovery_id() method converts back to 0/1 for internal use with k256. This ensures signatures are directly compatible with Ethereum RPC and tooling.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-crypto/src/signature.rs",
+          "keyword": "recovery_id.to_byte() + 27",
+          "line": 131
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "evm", "eip"],
+      "title": "EIP-2929 cold/warm storage access costs implemented",
+      "description": "EVM implements EIP-2929 access lists with differentiated gas costs. First access to storage slot (cold) costs 2100 gas, subsequent accesses (warm) cost 100 gas. BALANCE/EXTCODESIZE/EXTCODEHASH have cold cost 2600. This incentivizes access list usage and makes gas costs more predictable for state access patterns.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-evm/src/gas.rs",
+          "keyword": "COLD_SLOAD_COST",
+          "line": 18
+        },
+        {
+          "file": "rust/crates/bach-evm/src/gas.rs",
+          "keyword": "WARM_STORAGE_READ_COST",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "evm", "eip"],
+      "title": "EIP-170 max contract code size 24576 bytes",
+      "description": "Contract code size is limited to 24576 bytes (24KB) per EIP-170, introduced in Spurious Dragon. This prevents DoS attacks via large contracts and bounds code iteration costs. The limit is enforced at contract creation. MAX_CODE_SIZE constant defined in gas.rs.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-evm/src/gas.rs",
+          "keyword": "MAX_CODE_SIZE",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "evm", "eip"],
+      "title": "EIP-3860 max init code size 49152 bytes",
+      "description": "Contract initialization code (constructor) is limited to 49152 bytes (2x MAX_CODE_SIZE) per EIP-3860, introduced in Shanghai. This prevents DoS via large initcode and makes CREATE/CREATE2 gas costs more predictable. Additionally, initcode is charged 2 gas per word. MAX_INIT_CODE_SIZE constant defined in gas.rs.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-evm/src/gas.rs",
+          "keyword": "MAX_INIT_CODE_SIZE",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "evm"],
+      "title": "Stack limited to 1024 items with 256-bit values",
+      "description": "EVM stack follows Yellow Paper specification: maximum 1024 items, each item is 256-bit (U256 represented as [u8; 32] big-endian). StackOverflow error returned when pushing to full stack, StackUnderflow when popping from empty. DUP1-DUP16 and SWAP1-SWAP16 operate within this limit.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-evm/src/gas.rs",
+          "keyword": "MAX_STACK_SIZE",
+          "line": 25
+        },
+        {
+          "file": "rust/crates/bach-evm/src/stack.rs",
+          "keyword": "const MAX_STACK_SIZE",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "evm"],
+      "title": "Memory expansion aligned to 32-byte words",
+      "description": "EVM memory expands in 32-byte word increments. When accessing offset+size that exceeds current size, memory grows to next 32-byte boundary. Gas cost is quadratic: 3*words + words²/512 to prevent excessive allocation. Memory starts empty (size 0) and expands on demand via MLOAD/MSTORE/MSTORE8 and copy operations.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-evm/src/memory.rs",
+          "keyword": "expand",
+          "line": 28
+        },
+        {
+          "file": "rust/crates/bach-evm/src/gas.rs",
+          "keyword": "memory_gas",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "evm"],
+      "title": "JUMPDEST analysis prevents jumping into PUSH operands",
+      "description": "Before execution, bytecode is scanned to identify valid jump destinations (JUMPDEST opcodes at position not within PUSH operands). JUMP/JUMPI verify destination is in this set, returning InvalidJump error otherwise. This prevents malicious jumps into instruction middle bytes that could be misinterpreted as different opcodes.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-evm/src/interpreter.rs",
+          "keyword": "analyze_jump_dests",
+          "line": 54
+        },
+        {
+          "file": "rust/crates/bach-evm/src/interpreter.rs",
+          "keyword": "jump_dests.contains",
+          "line": 451
+        }
+      ]
+    },
+    {
+      "tags": ["todo", "txpool"],
+      "title": "TxPool::set_base_fee is a no-op - needs full implementation",
+      "description": "The set_base_fee method is currently a simplified no-op that doesn't actually recalculate effective gas prices or evict transactions that become invalid at the new base fee. A production implementation should: 1) Recalculate effective_gas_price for all pooled transactions, 2) Evict transactions where max_fee_per_gas < new_base_fee, 3) Re-sort pending transactions by new effective prices.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-txpool/src/pool.rs",
+          "keyword": "set_base_fee",
+          "line": 353
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "txpool"],
+      "title": "Transaction replacement requires 10% gas price bump",
+      "description": "When replacing an existing transaction with the same nonce, the new transaction must have an effective gas price at least 10% higher than the existing one (MIN_GAS_PRICE_BUMP=10). This prevents spam attacks where attackers repeatedly replace transactions with marginally higher prices. The check applies to both pending and queued transactions.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-txpool/src/pool.rs",
+          "keyword": "MIN_GAS_PRICE_BUMP",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "txpool"],
+      "title": "Maximum nonce gap of 64 for queued transactions",
+      "description": "Transactions with nonce more than 64 ahead of the current state nonce are rejected (MAX_NONCE_GAP=64). This prevents memory exhaustion attacks where an attacker could submit transactions with very high nonces that would never execute but consume pool memory.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-txpool/src/pool.rs",
+          "keyword": "MAX_NONCE_GAP",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "security", "sdk"],
+      "title": "Wallet intentionally not Clone to prevent accidental key duplication",
+      "description": "The bach_sdk::Wallet type deliberately does not implement Clone. This prevents accidental duplication of private key material across multiple locations in code. Users must explicitly pass references or Arc<Wallet> when sharing. The private key is protected with zeroize for secure cleanup on drop, and Debug impl hides the key.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-sdk/src/wallet.rs",
+          "keyword": "struct Wallet",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "security", "sdk"],
+      "title": "TxBuilder rejects chain_id=0 for EIP-155 replay protection",
+      "description": "TxBuilder validates that chain_id != 0 before building transactions. Chain ID 0 would create transactions valid on all chains (pre-EIP-155 behavior), enabling replay attacks. Users must specify explicit chain_id (mainnet=1, testnet values, or custom).",
+      "locations": [
+        {
+          "file": "rust/crates/bach-sdk/src/tx_builder.rs",
+          "keyword": "chain_id != 0",
+          "line": 89
+        }
+      ]
+    },
+    {
+      "tags": ["todo", "sdk"],
+      "title": "BachClient block/transaction/receipt parsing returns None",
+      "description": "The BachClient methods get_block(), get_transaction(), get_receipt() have TODO comments and return None for the parsed result. The JSON is received from the RPC endpoint but parsing into typed structures is not implemented. Currently useful for raw JSON inspection but not typed access.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-sdk/src/client.rs",
+          "keyword": "TODO: Parse block from JSON",
+          "line": 95
+        },
+        {
+          "file": "rust/crates/bach-sdk/src/client.rs",
+          "keyword": "TODO: Parse transaction from JSON",
+          "line": 115
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "cli", "security"],
+      "title": "Web3 keystore uses reduced scrypt N for faster testing",
+      "description": "The CLI keygen command uses scrypt N=8192 (2^13) instead of the Web3 standard N=262144 (2^18). This makes keystore creation/decryption faster for development but provides less security against brute-force attacks. Production deployments should increase to N=262144. Comment in code indicates this trade-off.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-cli/src/commands/keygen.rs",
+          "keyword": "let n = 8192u32",
+          "line": 257
+        }
+      ]
+    },
+    {
+      "tags": ["todo", "rpc"],
+      "title": "eth_getTransactionReceipt always returns null",
+      "description": "The eth_getTransactionReceipt RPC method is not fully implemented. It parses the tx hash parameter but always returns Value::Null. Needs implementation to search block database for receipts by transaction hash.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-rpc/src/methods/eth.rs",
+          "keyword": "eth_get_transaction_receipt",
+          "line": 468
+        }
+      ]
+    },
+    {
+      "tags": ["todo", "rpc"],
+      "title": "eth_getBlockByHash uses linear scan instead of reverse index",
+      "description": "Finding a block by hash requires scanning from latest block backwards until hash matches. A proper reverse index (hash -> number) in BlockDb would make this O(1) instead of O(n). Current implementation notes this as TODO.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-rpc/src/methods/eth.rs",
+          "keyword": "Find block number from hash",
+          "line": 421
+        }
+      ]
+    },
+    {
+      "tags": ["design-decision", "rpc"],
+      "title": "RPC returns minimal block structure pending full header decoding",
+      "description": "eth_getBlockByNumber and eth_getBlockByHash return blocks with mostly zero/default values. The header bytes are stored in BlockDb but full decoding into RpcBlock fields is not implemented. Block hash and number are correct, other fields are placeholders.",
+      "locations": [
+        {
+          "file": "rust/crates/bach-rpc/src/methods/eth.rs",
+          "keyword": "get_block_by_hash_internal",
+          "line": 523
+        }
+      ]
+    }
+  ]
+}

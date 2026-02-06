@@ -1,0 +1,731 @@
+{
+  "external": [],
+  "internal": [
+    {
+      "type": "callback",
+      "name": "bach_primitives::Address::from_hex(s: &str) -> Result<Address, AddressError>",
+      "params": "s: hex string with or without 0x prefix",
+      "description": "Parses 20-byte Ethereum address from hex string. Case-insensitive. Returns InvalidHex for non-hex chars, InvalidLength if not exactly 20 bytes."
+    },
+    {
+      "type": "callback",
+      "name": "bach_primitives::Address::from_bytes(bytes: [u8; 20]) -> Address",
+      "params": "bytes: exactly 20-byte array",
+      "description": "Creates address from raw bytes. Infallible since length is compile-time checked."
+    },
+    {
+      "type": "callback",
+      "name": "bach_primitives::H256::from_hex(s: &str) -> Result<H256, HashError>",
+      "params": "s: hex string with or without 0x prefix",
+      "description": "Parses 32-byte hash from hex string. Case-insensitive. Returns InvalidHex for non-hex chars, InvalidLength if not exactly 32 bytes."
+    },
+    {
+      "type": "callback",
+      "name": "bach_primitives::H256::from_bytes(bytes: [u8; 32]) -> H256",
+      "params": "bytes: exactly 32-byte array",
+      "description": "Creates H256 from raw bytes. Const fn, usable in compile-time contexts."
+    },
+    {
+      "type": "callback",
+      "name": "bach_crypto::keccak256(data: &[u8]) -> H256",
+      "params": "data: arbitrary byte slice to hash",
+      "description": "Computes Keccak-256 hash of input data, returns 32-byte H256. Used for Ethereum-compatible hashing (tx hashes, function selectors, address derivation)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_crypto::sign(message_hash: &H256, private_key: &PrivateKey) -> Result<Signature, CryptoError>",
+      "params": "message_hash: 32-byte hash to sign; private_key: secp256k1 signing key",
+      "description": "Signs a message hash using ECDSA secp256k1. Returns EIP-2 compliant signature with low-s normalization. Signature contains r, s components and v recovery ID (27 or 28)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_crypto::verify(message_hash: &H256, signature: &Signature, public_key: &PublicKey) -> Result<bool, CryptoError>",
+      "params": "message_hash: hash that was signed; signature: ECDSA signature with r/s/v; public_key: expected signer's public key",
+      "description": "Verifies ECDSA signature. Rejects non-low-s signatures per EIP-2 to prevent signature malleability. Returns true if valid, false otherwise."
+    },
+    {
+      "type": "callback",
+      "name": "bach_crypto::recover_public_key(message_hash: &H256, signature: &Signature) -> Result<PublicKey, CryptoError>",
+      "params": "message_hash: hash that was signed; signature: ECDSA signature with recovery ID",
+      "description": "Recovers the signer's public key from signature using the v recovery ID. Essential for Ethereum-style transaction validation where sender is derived from signature."
+    },
+    {
+      "type": "callback",
+      "name": "bach_crypto::public_key_to_address(public_key: &PublicKey) -> Address",
+      "params": "public_key: secp256k1 verifying key",
+      "description": "Derives Ethereum-compatible address from public key: takes uncompressed pubkey (64 bytes without 0x04 prefix), computes keccak256, returns last 20 bytes as Address."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rlp::encode<T: Encodable>(value: &T) -> Vec<u8>",
+      "params": "value: any type implementing rlp::Encodable trait",
+      "description": "Encodes a value to RLP bytes. Wrapper around rlp::encode for convenience."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rlp::decode<T: Decodable>(data: &[u8]) -> Result<T, DecoderError>",
+      "params": "data: RLP-encoded byte slice",
+      "description": "Decodes RLP bytes to a value. Returns DecoderError on invalid RLP or type mismatch."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rlp::utils::encode_u64(value: u64) -> Vec<u8>",
+      "params": "value: u64 integer to encode",
+      "description": "Encodes u64 with minimal bytes (no leading zeros). 0 encodes as 0x80 (empty string), values < 128 as single byte, larger values with length prefix."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rlp::utils::decode_u64(data: &[u8]) -> Result<(u64, usize), DecoderError>",
+      "params": "data: RLP-encoded bytes",
+      "description": "Decodes RLP-encoded integer to u64, returns (value, bytes_consumed). Errors on empty input, truncated data, or values > 8 bytes."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rlp::utils::list_header(payload_len: usize) -> Vec<u8>",
+      "params": "payload_len: total length of list items in bytes",
+      "description": "Computes RLP list header for given payload length. Short lists (< 56 bytes): 0xc0 + len. Long lists: 0xf7 + len_of_len + len bytes."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Interpreter::new(code: Vec<u8>, gas: u64) -> Self",
+      "params": "code: EVM bytecode to execute; gas: initial gas limit",
+      "description": "Creates new interpreter instance. Analyzes bytecode for valid JUMPDEST locations, initializes empty stack/memory, sets PC to 0."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Interpreter::run(&mut self, env: &Environment) -> ExecutionResult",
+      "params": "env: execution environment with call/block/tx contexts",
+      "description": "Executes bytecode until STOP, RETURN, REVERT, error, or end of code. Returns ExecutionResult with success flag, gas_used, output data, and logs. Consumes all gas on non-revert errors."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Interpreter::step(&mut self, env: &Environment) -> EvmResult<()>",
+      "params": "env: execution environment",
+      "description": "Executes single opcode. Reads opcode at PC, charges static gas, dispatches to handler, advances PC. Returns EvmError on failure."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Environment::new(call: CallContext, block: BlockContext, tx: TxContext) -> Self",
+      "params": "call: contract/caller/value/data/gas info; block: number/timestamp/coinbase/etc; tx: origin/gas_price",
+      "description": "Creates complete execution environment. All contexts have Default implementations for testing."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::ExecutionResult::success(gas_used: u64, output: Vec<u8>, logs: Vec<Log>) -> Self",
+      "params": "gas_used: gas consumed; output: return data; logs: emitted events",
+      "description": "Creates successful execution result (STOP/RETURN). Success flag is true."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::ExecutionResult::failure(gas_used: u64, output: Vec<u8>) -> Self",
+      "params": "gas_used: gas consumed (typically all); output: empty or error data",
+      "description": "Creates failed execution result (OutOfGas, InvalidJump, etc). Success flag is false, all gas consumed."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::ExecutionResult::revert(gas_used: u64, output: Vec<u8>) -> Self",
+      "params": "gas_used: gas consumed before revert; output: revert reason data",
+      "description": "Creates reverted execution result (REVERT opcode). Success flag is false, remaining gas refunded."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Stack::push(value: U256) -> EvmResult<()>",
+      "params": "value: 256-bit value to push",
+      "description": "Pushes value onto stack. Returns StackOverflow if stack has 1024 items."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Stack::pop() -> EvmResult<U256>",
+      "params": "none",
+      "description": "Pops and returns top stack value. Returns StackUnderflow if empty."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::Memory::expand(offset: usize, size: usize) -> usize",
+      "params": "offset: memory offset to access; size: number of bytes to access",
+      "description": "Expands memory if needed to cover [offset, offset+size). Returns new memory size. Expansion is 32-byte word aligned."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::gas::static_gas(opcode: Opcode) -> u64",
+      "params": "opcode: EVM opcode",
+      "description": "Returns base gas cost for opcode per Yellow Paper. Does not include dynamic costs (memory expansion, copy operations, etc)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm::gas::memory_gas(current_size: usize, new_size: usize) -> u64",
+      "params": "current_size: current memory size; new_size: required memory size",
+      "description": "Calculates gas cost for memory expansion. Formula: 3 * words + words^2 / 512, charged only for growth (new - current). Memory is word-addressable for gas purposes."
+    },
+    {
+      "type": "callback",
+      "name": "bach_metrics::Metrics::histogram(name: &str, value: f64)",
+      "params": "name: metric name; value: observation value (typically microseconds)",
+      "description": "Records a histogram observation. Thread-safe with RwLock. Auto-creates histogram on first use with default buckets [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000]."
+    },
+    {
+      "type": "callback",
+      "name": "bach_metrics::Metrics::counter(name: &str, delta: u64)",
+      "params": "name: counter name; delta: amount to increment",
+      "description": "Increments a counter by delta. Thread-safe with AtomicU64. Auto-creates counter on first use starting at 0."
+    },
+    {
+      "type": "callback",
+      "name": "bach_metrics::Metrics::gauge(name: &str, value: i64)",
+      "params": "name: gauge name; value: current value to set",
+      "description": "Sets a gauge to a specific value. Thread-safe with AtomicI64. Auto-creates gauge on first use. Supports negative values."
+    },
+    {
+      "type": "callback",
+      "name": "bach_metrics::MetricsSnapshot::from_metrics(metrics: &Metrics) -> Self",
+      "params": "metrics: reference to Metrics instance",
+      "description": "Creates a point-in-time snapshot of all metrics. Captures current values of all counters, gauges, and histogram summaries (mean, count)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::RWSet::record_read(key: StateKey)",
+      "params": "key: StateKey identifying the state slot being read",
+      "description": "Records that this transaction reads the given state key. Used for dependency analysis - creates RAW dependency if another tx writes this key."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::RWSet::record_write(key: StateKey)",
+      "params": "key: StateKey identifying the state slot being written",
+      "description": "Records that this transaction writes the given state key. Creates WAW dependency with other writers and WAR dependency with prior readers."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::RWSet::get_conflicts(other: &RWSet) -> ConflictSet",
+      "params": "other: another transaction's RWSet",
+      "description": "Computes all conflicts between two transactions. Returns ConflictSet categorizing conflicts as RAW (read-after-write), WAW (write-after-write), or WAR (write-after-read)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::DependencyGraph::build(rw_sets: &[(TxId, RWSet)]) -> Self",
+      "params": "rw_sets: slice of (transaction_id, read_write_set) pairs",
+      "description": "Builds dependency DAG by analyzing all pairs of transactions for RAW/WAW/WAR conflicts. For transactions i < j, adds edge i -> j if j depends on i. O(n²) complexity."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::DependencyGraph::generate_batches() -> SchedulerResult<Vec<Vec<TxId>>>",
+      "params": "none",
+      "description": "Generates parallel execution batches using topological level decomposition. Each batch contains transactions with all dependencies satisfied, executable in parallel. Returns error if cycle detected."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::Scheduler::schedule() -> SchedulerResult<ScheduleResult>",
+      "params": "none",
+      "description": "Main entry point for scheduling. Collects registered transactions, sorts by TxId for determinism, builds dependency graph, generates batches. Returns ScheduleResult with batches and parallelism metrics."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::Scheduler::acquire_ownership(tx_id: TxId) -> SchedulerResult<()>",
+      "params": "tx_id: transaction attempting to acquire ownership",
+      "description": "Attempts to acquire ownership of all keys in transaction's write set. Returns OwnershipConflict error if any key is already owned by another transaction. Used during execution for runtime conflict prevention."
+    },
+    {
+      "type": "callback",
+      "name": "bach_scheduler::OwnershipTable::try_acquire(key: &StateKey, tx_id: TxId) -> Result<(), TxId>",
+      "params": "key: state key to acquire; tx_id: requesting transaction",
+      "description": "Atomically tries to acquire ownership of a state key. Returns Ok(()) if acquired or already owned by this tx, Err(owner) if owned by another transaction. Uses DashMap for lock-free concurrent access."
+    },
+    {
+      "type": "callback",
+      "name": "bach_core::BlockExecutor::new(chain_id: u64) -> Self",
+      "params": "chain_id: blockchain chain ID for transaction signing",
+      "description": "Creates new block executor with empty state. Used for processing blocks and transactions with EVM execution."
+    },
+    {
+      "type": "callback",
+      "name": "bach_core::BlockExecutor::execute_block(&mut self, block: &Block) -> ExecutionResult<BlockExecutionResult>",
+      "params": "block: Block containing header and body with transactions",
+      "description": "Executes all transactions in a block sequentially. Validates gas limits, recovers senders, executes EVM, handles gas refunds, pays miners. Returns receipts, gas_used, state_root, logs_bloom."
+    },
+    {
+      "type": "callback",
+      "name": "bach_core::BlockExecutor::execute_transaction(&mut self, tx: &SignedTransaction, block_ctx: &BlockContext, cumulative_gas: u64) -> ExecutionResult<Receipt>",
+      "params": "tx: signed transaction; block_ctx: block context for EVM; cumulative_gas: gas used by previous transactions",
+      "description": "Executes a single transaction. Flow: recover sender, validate nonce, check balance, deduct gas cost, build EVM environment, execute (create or call), refund unused gas, pay coinbase. Returns Receipt with status, gas, logs."
+    },
+    {
+      "type": "callback",
+      "name": "bach_consensus::TbftConsensus::new(config: TbftConfig, validator_set: ValidatorSet) -> Self",
+      "params": "config: consensus configuration with address and timeouts; validator_set: initial validator set",
+      "description": "Creates new TBFT consensus engine. Initializes at height 0, round 0, step NewRound. Validators participate in proposing blocks and voting."
+    },
+    {
+      "type": "callback",
+      "name": "bach_consensus::TbftConsensus::start_height(&mut self, height: u64)",
+      "params": "height: new block height to start consensus for",
+      "description": "Starts consensus for a new height. Resets round to 0, clears lock state, enters NewRound then Propose step. If we are proposer, queues CreateBlock message."
+    },
+    {
+      "type": "callback",
+      "name": "bach_consensus::TbftConsensus::on_vote(&mut self, vote: Vote) -> ConsensusResult<()>",
+      "params": "vote: prevote or precommit vote from a validator",
+      "description": "Processes incoming vote. Validates height, verifies voter is validator, checks signature, stores vote, then checks voting thresholds. On 2/3+ prevotes for block, locks and moves to precommit. On 2/3+ precommits, commits block."
+    },
+    {
+      "type": "callback",
+      "name": "bach_consensus::ValidatorSet::has_two_thirds(power: u64) -> bool",
+      "params": "power: voting power to check",
+      "description": "Checks if power represents >2/3 of total voting power (BFT threshold). Formula: power * 3 > total_power * 2. Required for polka (prevote) and commit (precommit) decisions."
+    },
+    {
+      "type": "callback",
+      "name": "bach_consensus::ValidatorSet::proposer(height: u64, round: u32) -> Option<&Validator>",
+      "params": "height: block height; round: consensus round",
+      "description": "Determines proposer for given height and round using round-robin. Formula: validators[(height + round) % len]. Returns None if validator set is empty."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::new(config: PoolConfig) -> Self",
+      "params": "config: pool configuration with limits and gas settings",
+      "description": "Creates new transaction pool with specified configuration. Initializes empty pending/queued structures, hash index, and atomic counters."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::with_defaults() -> Self",
+      "params": "none",
+      "description": "Creates pool with default config: max_pending=4096, max_queued=1024, max_per_account=16, block_gas_limit=30M, min_gas_price=1gwei, base_fee=0."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::get_by_hash(&self, hash: &H256) -> Option<PooledTransaction>",
+      "params": "hash: transaction hash to lookup",
+      "description": "Returns transaction by hash if it exists in the pool. O(1) lookup via DashMap index."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::get_nonce(&self, address: &Address) -> u64",
+      "params": "address: account address",
+      "description": "Returns next expected nonce for account (state_nonce + pending count). Returns 0 if account has no transactions in pool."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::clear(&self)",
+      "params": "none",
+      "description": "Removes all transactions from pool, resets all counters to zero. Used for testing or chain reset scenarios."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::add(&self, tx: SignedTransaction, sender: Address, hash: H256) -> TxPoolResult<()>",
+      "params": "tx: signed transaction; sender: recovered sender address; hash: transaction hash",
+      "description": "Adds transaction to pool. Validates gas limits, gas price, nonce ordering, pool limits. Handles replacement with 10% gas price bump. Places in pending (if nonce sequential) or queued (if nonce gap). Promotes queued transactions when gaps fill."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::get_pending(&self, limit: usize) -> Vec<PooledTransaction>",
+      "params": "limit: maximum number of transactions to return",
+      "description": "Returns pending transactions sorted by effective gas price (descending). Used for block production to select highest-paying transactions first."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::set_nonce(&self, address: &Address, nonce: u64)",
+      "params": "address: account address; nonce: new state nonce after execution",
+      "description": "Updates account state nonce after block execution. Removes all pending/queued transactions with nonce < new_nonce. Promotes queued transactions if gaps filled."
+    },
+    {
+      "type": "callback",
+      "name": "bach_txpool::TxPool::remove(&self, hash: &H256) -> Option<PooledTransaction>",
+      "params": "hash: transaction hash to remove",
+      "description": "Removes transaction by hash from pool and all indexes. Returns the removed transaction if found."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::NetworkService::new(config: NetworkConfig) -> Self",
+      "params": "config: network configuration with listen address, peers, chain settings",
+      "description": "Creates new network service. Initializes peer manager, event channels, height tracking. Does not start listening until start() called."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::NetworkService::start(&self) -> NetworkResult<()>",
+      "params": "none",
+      "description": "Starts network service. Binds TCP listener, connects to bootstrap peers, spawns connection accept loop. Returns AlreadyRunning error if already started."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::NetworkService::connect(&self, addr: SocketAddr) -> NetworkResult<PeerId>",
+      "params": "addr: remote peer address to connect to",
+      "description": "Initiates outbound connection to peer. Performs TCP connect, handshake exchange, chain validation. Returns peer ID on success."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::NetworkService::broadcast(&self, msg: Message)",
+      "params": "msg: message to broadcast to all connected peers",
+      "description": "Broadcasts message to all connected peers. Iterates peer connections, sends via channels. Non-blocking, errors logged but not propagated."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::NetworkService::send_to(&self, peer_id: &PeerId, msg: Message) -> NetworkResult<()>",
+      "params": "peer_id: target peer; msg: message to send",
+      "description": "Sends message to specific peer. Returns PeerNotFound error if peer not connected."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::NetworkService::take_events(&mut self) -> Option<mpsc::Receiver<NetworkEvent>>",
+      "params": "none",
+      "description": "Takes event receiver for handling network events. Can only be called once. Returns PeerConnected, PeerDisconnected, and Message events."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::Message::encode(&self) -> Bytes",
+      "params": "none",
+      "description": "Encodes message to wire format: [length:4 bytes BE][type:1 byte][payload:N bytes]. Total length in header is type + payload length."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::Message::decode(data: Bytes) -> Option<Self>",
+      "params": "data: raw bytes from network",
+      "description": "Decodes message from wire format. Returns None if data too short, length invalid, or message type unknown."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::PeerManager::add_peer(&self, info: PeerInfo, conn: Arc<PeerConnection>) -> NetworkResult<()>",
+      "params": "info: peer information; conn: connection handle with sender channel",
+      "description": "Registers new peer in manager. Checks max_peers limit and duplicate peer ID. Stores info and connection for message routing."
+    },
+    {
+      "type": "callback",
+      "name": "bach_network::PeerId::random() -> Self",
+      "params": "none",
+      "description": "Generates random 32-byte peer ID using thread_rng. Used for local node identity."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::RpcServer::new(config: ServerConfig, handler: RpcHandler) -> Self",
+      "params": "config: server configuration; handler: RPC request handler",
+      "description": "Creates new RPC server with axum HTTP framework. Configure listen_addr, max_body_size, CORS."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::RpcServer::run(self) -> RpcResult<()>",
+      "params": "none (consumes self)",
+      "description": "Starts HTTP server, binds to listen_addr, serves JSON-RPC requests. Blocks until server stops."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::RpcHandler::handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse",
+      "params": "request: parsed JSON-RPC request with method and params",
+      "description": "Dispatches request to registered method handler. Returns success or error response."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::RpcContext::new(state_db, block_db, txpool, chain_id) -> Self",
+      "params": "state_db: Arc<StateDb>; block_db: Arc<BlockDb>; txpool: Arc<TxPool>; chain_id: u64",
+      "description": "Creates shared context for RPC handlers. Provides access to state, blocks, txpool, and creates BlockExecutor for eth_call/estimateGas."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::BachClient::connect(url: &str) -> Result<Self, SdkError>",
+      "params": "url: HTTP RPC endpoint URL",
+      "description": "Creates client with HTTP transport, fetches and caches chain_id. Requires 'http' feature."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::BachClient::get_balance(&self, address: &Address, block: BlockId) -> Result<U256, SdkError>",
+      "params": "address: account address; block: block identifier (Latest, Number, etc)",
+      "description": "Queries account balance via eth_getBalance RPC call."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::BachClient::send_transaction(&self, tx: &SignedTransaction) -> Result<PendingTransaction, SdkError>",
+      "params": "tx: signed transaction to submit",
+      "description": "RLP-encodes and submits transaction via eth_sendRawTransaction. Returns PendingTransaction with tx hash."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::Wallet::new_random() -> Self",
+      "params": "none",
+      "description": "Generates new wallet with random secp256k1 private key using OsRng."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::Wallet::from_private_key_hex(hex: &str) -> Result<Self, SdkError>",
+      "params": "hex: private key as hex string (with or without 0x prefix)",
+      "description": "Creates wallet from hex-encoded private key. Validates length (32 bytes). Uses zeroize for secure cleanup."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::Wallet::sign_hash(&self, hash: &H256) -> Result<Signature, SdkError>",
+      "params": "hash: 32-byte message hash to sign",
+      "description": "Signs hash using ECDSA secp256k1. Returns Signature with r, s, v components."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::TxBuilder::new(chain_id: u64) -> Self",
+      "params": "chain_id: blockchain chain ID for EIP-155 replay protection",
+      "description": "Creates transaction builder. Chain methods: nonce(), gas_limit(), gas_price(), to(), value(), data()."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::TxBuilder::sign_legacy(self, wallet: &Wallet) -> Result<SignedTransaction, SdkError>",
+      "params": "wallet: Wallet to sign with",
+      "description": "Builds and signs legacy (Type 0) transaction. Consumes builder."
+    },
+    {
+      "type": "callback",
+      "name": "bach_node::Node::new(config: NodeConfig) -> NodeResult<Self>",
+      "params": "config: node configuration with datadir, chain_id, rpc, genesis, block settings",
+      "description": "Creates new node. Opens RocksDB database, initializes genesis if needed, creates txpool and executor."
+    },
+    {
+      "type": "callback",
+      "name": "bach_node::Node::run(self: Arc<Self>) -> NodeResult<()>",
+      "params": "none (takes Arc<Self>)",
+      "description": "Runs main event loop. Periodically checks for pending transactions and produces blocks. Blocks until stopped."
+    },
+    {
+      "type": "callback",
+      "name": "bach_node::Node::produce_block(&self, transactions: Vec<PooledTransaction>) -> NodeResult<()>",
+      "params": "transactions: pending transactions from txpool",
+      "description": "Builds block from transactions, executes via BlockExecutor, stores header/body/receipts in block_db, updates txpool nonces."
+    },
+    {
+      "type": "constant",
+      "name": "bach_e2e::TEST_CHAIN_ID",
+      "params": "1337",
+      "description": "Default chain ID for e2e tests (Hardhat/Ganache compatible)"
+    },
+    {
+      "type": "constant",
+      "name": "bach_e2e::DEFAULT_GAS_LIMIT",
+      "params": "1_000_000",
+      "description": "Default gas limit for test transactions"
+    },
+    {
+      "type": "constant",
+      "name": "bach_e2e::FUNDED_BALANCE",
+      "params": "100 * 10^18 (100 ETH)",
+      "description": "Default balance funded to test accounts"
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::new() -> Self",
+      "params": "none",
+      "description": "Creates isolated test environment with tempdir database, chain_id=1337, block_number=0, base_fee=1gwei. Each test gets fresh state."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::with_chain_id(chain_id: u64) -> Self",
+      "params": "chain_id: custom chain ID",
+      "description": "Creates test harness with custom chain ID instead of default 1337."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::create_account(&mut self) -> TestAccount",
+      "params": "none",
+      "description": "Creates new random test account with generated private key, derived address, nonce=0."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::fund_account(&mut self, account: &TestAccount, amount: U256) -> E2EResult<()>",
+      "params": "account: TestAccount to fund; amount: Wei amount",
+      "description": "Sets account balance in state. Used to fund test accounts before transactions."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::transfer(&mut self, from: &TestAccount, to: Address, value: U256) -> E2EResult<Receipt>",
+      "params": "from: sender account; to: recipient address; value: Wei to transfer",
+      "description": "Builds, signs, and executes ETH transfer transaction. Returns receipt with status/gas."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::deploy_contract(&mut self, deployer: &TestAccount, init_code: &[u8]) -> E2EResult<(Address, Receipt)>",
+      "params": "deployer: account deploying; init_code: contract constructor bytecode",
+      "description": "Deploys contract (to=None tx). Returns deployed contract address and receipt."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::call(&mut self, caller: &TestAccount, contract: Address, data: &[u8]) -> E2EResult<Receipt>",
+      "params": "caller: sender; contract: target; data: calldata (selector + encoded args)",
+      "description": "Executes contract call with zero value. Returns receipt."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestHarness::balance(&self, address: &Address) -> U256",
+      "params": "address: account to query",
+      "description": "Returns current account balance from state."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestAccount::random() -> Self",
+      "params": "none",
+      "description": "Generates random test account with new private key."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestAccount::from_hex(hex: &str) -> E2EResult<Self>",
+      "params": "hex: private key hex (0x-prefixed or not)",
+      "description": "Creates test account from known private key. Useful for deterministic tests."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TestAccount::sign(&self, tx_hash: &H256, chain_id: u64) -> Signature",
+      "params": "tx_hash: EIP-155 signing hash; chain_id: for v calculation",
+      "description": "Signs transaction hash with account's private key. Returns (r, s, v) signature."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TxBuilder::transfer(from: &TestAccount, to: Address, value: U256) -> Self",
+      "params": "from: sender; to: recipient; value: amount",
+      "description": "Creates builder for simple ETH transfer. Sets default gas_limit=21000."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TxBuilder::deploy(from: &TestAccount, init_code: &[u8]) -> Self",
+      "params": "from: deployer account; init_code: contract constructor code",
+      "description": "Creates builder for contract deployment (to=None). Sets default gas_limit=1M."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::TxBuilder::call(from: &TestAccount, contract: Address) -> Self",
+      "params": "from: caller; contract: target address",
+      "description": "Creates builder for contract call. Chain .data() and optionally .value()."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::EtherDenom::ether(&self) -> U256",
+      "params": "self: numeric value (u64/u128/i32)",
+      "description": "Converts to Wei. Example: 1.ether() = 10^18 Wei."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::EtherDenom::gwei(&self) -> U256",
+      "params": "self: numeric value (u64/u128/i32)",
+      "description": "Converts to Wei. Example: 100.gwei() = 100 * 10^9 Wei."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::contracts::encode_store(value: U256) -> Vec<u8>",
+      "params": "value: 256-bit value to store",
+      "description": "Encodes SimpleStorage.store(uint256) call. Returns selector 0x6057361d + ABI-encoded value."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::contracts::encode_retrieve() -> Vec<u8>",
+      "params": "none",
+      "description": "Encodes SimpleStorage.retrieve() call. Returns selector 0x2e64cec1."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::ReceiptAssertions::assert_success(&self) -> &Self",
+      "params": "none",
+      "description": "Asserts receipt status is success (1). Panics with descriptive message if failed."
+    },
+    {
+      "type": "callback",
+      "name": "bach_e2e::ReceiptAssertions::assert_contract_created(&self) -> Address",
+      "params": "none",
+      "description": "Asserts receipt contains contract address and returns it. Panics if not a deployment."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm_tests::TestRunner::new(fork: &str, verbose: bool) -> Self",
+      "params": "fork: target Ethereum fork (Berlin, London, Paris, Shanghai, Cancun); verbose: enable detailed logging",
+      "description": "Creates test runner with specified fork for state tests. VM tests run regardless of fork. Verbose mode prints individual test results."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm_tests::TestRunner::run_all(&self, tests_dir: &Path) -> TestStats",
+      "params": "tests_dir: path to ethereum/tests directory containing VMTests/ and GeneralStateTests/",
+      "description": "Runs all ethereum/tests against bach-evm. Scans for VMTests/ and GeneralStateTests/ subdirectories, recursively finds .json files. Returns aggregated TestStats."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm_tests::VmTestRunner::run_file(&self, path: &Path) -> TestResult<VmTestResults>",
+      "params": "path: path to VM test JSON file (VMTests format)",
+      "description": "Runs all test cases in a single VM test file. Deserializes JSON, builds Environment from test params, runs Interpreter, validates gas/output. Returns VmTestResults with passed/failed lists."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm_tests::StateTestRunner::run_file(&self, path: &Path) -> TestResult<StateTestResults>",
+      "params": "path: path to state test JSON file (GeneralStateTests format)",
+      "description": "Runs all test cases for the configured fork. Handles index selectors for data/gas/value combinations. Skips tests for unsupported forks. Returns StateTestResults with passed/failed/skipped."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm_tests::TestStats::pass_rate(&self) -> f64",
+      "params": "none",
+      "description": "Returns pass rate as percentage (0.0-100.0). Formula: (passed as f64) / (passed + failed) * 100.0. Returns 100.0 if no tests executed."
+    },
+    {
+      "type": "callback",
+      "name": "bach_evm_tests::TestStats::print_summary(&self)",
+      "params": "none",
+      "description": "Prints formatted test summary including total/passed/failed/skipped counts, pass rate, duration, and up to 10 failure reasons if any."
+    },
+    {
+      "type": "constant",
+      "name": "bach_evm_tests::SUPPORTED_FORKS",
+      "params": "[\"Berlin\", \"London\", \"Paris\", \"Shanghai\", \"Cancun\"]",
+      "description": "List of Ethereum hard forks supported by the state test runner. Tests for other forks are skipped."
+    },
+    {
+      "type": "callback",
+      "name": "bach_cli::commands::keygen::create_keystore(private_key: &[u8;32], password: &str, address: &Address) -> Result<KeystoreV3, CliError>",
+      "params": "private_key: 32-byte secp256k1 private key; password: encryption password; address: derived address",
+      "description": "Creates Web3 V3 encrypted keystore. Uses scrypt KDF (N=8192 for testing, should be 262144 for production), AES-128-CTR encryption, keccak256 MAC. Output JSON contains version, id, address, cipher, kdf params, salt, IV, ciphertext, mac."
+    },
+    {
+      "type": "callback",
+      "name": "bach_cli::commands::keygen::decrypt_keystore_file(keystore: &KeystoreV3, password: &str) -> Result<[u8;32], CliError>",
+      "params": "keystore: parsed KeystoreV3 JSON; password: decryption password",
+      "description": "Decrypts keystore file. Derives key via scrypt, verifies MAC (keccak256 of mac_key || ciphertext), decrypts AES-128-CTR. Returns InvalidPassword error if MAC mismatch."
+    },
+    {
+      "type": "callback",
+      "name": "bach_cli::commands::keygen::to_checksum_address(address: &Address) -> String",
+      "params": "address: 20-byte Ethereum address",
+      "description": "Converts address to EIP-55 checksum format. Uses keccak256 of lowercase hex, uppercase if corresponding hash nibble >= 8."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::methods::eth::eth_call(ctx, params) -> Result<Value, JsonRpcError>",
+      "params": "ctx: Arc<RpcContext>; params: [CallRequest, BlockId?]",
+      "description": "Executes call without creating transaction. Builds EVM environment, gets contract code, runs Interpreter. Returns hex output on success, execution_error on revert with revert data."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::methods::eth::eth_estimate_gas(ctx, params) -> Result<Value, JsonRpcError>",
+      "params": "ctx: Arc<RpcContext>; params: [CallRequest]",
+      "description": "Estimates gas for transaction. Formula: base_gas(21000) + data_gas(4/byte zero, 16/byte nonzero) + execution_overhead(50000 if contract) + 20% buffer."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::methods::eth::eth_send_raw_transaction(ctx, params) -> Result<Value, JsonRpcError>",
+      "params": "ctx: Arc<RpcContext>; params: [hex_encoded_signed_tx]",
+      "description": "Submits raw transaction. Decodes RLP, recovers sender from signature via EIP-155, validates balance/nonce, adds to txpool. Returns tx hash."
+    },
+    {
+      "type": "callback",
+      "name": "bach_rpc::methods::eth::decode_raw_transaction(raw_tx: &[u8]) -> Result<SignedTransaction, String>",
+      "params": "raw_tx: RLP-encoded signed transaction bytes",
+      "description": "Decodes raw transaction. First byte >= 0xc0 indicates legacy tx (RLP list with 9 items: nonce, gasPrice, gasLimit, to, value, data, v, r, s). Typed transactions (first byte < 0xc0) not yet supported."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::abi::encode_function_call(selector: [u8;4], tokens: &[Token]) -> Vec<u8>",
+      "params": "selector: 4-byte function selector; tokens: encoded parameters",
+      "description": "Encodes complete function call. Returns selector || encoded_params. Uses head/tail encoding for dynamic types (bytes, string, arrays)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::abi::decode_output(output: &[u8], types: &[ParamType]) -> Result<Vec<Token>, SdkError>",
+      "params": "output: raw bytes from eth_call; types: expected return types",
+      "description": "Decodes ABI-encoded output. Supports all Solidity types including dynamic arrays and tuples."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::contract::erc20(address: Address) -> Contract",
+      "params": "address: ERC20 token contract address",
+      "description": "Creates pre-built ERC20 contract helper. Functions: name(), symbol(), decimals(), totalSupply(), balanceOf(address), transfer(to,amount), approve(spender,amount), allowance(owner,spender), transferFrom(from,to,amount)."
+    },
+    {
+      "type": "callback",
+      "name": "bach_sdk::Contract::encode_call(&self, function: &str, args: &[Token]) -> Result<Vec<u8>, SdkError>",
+      "params": "function: function name; args: function arguments as Token values",
+      "description": "Encodes a contract function call. Looks up function definition, computes selector from signature, ABI-encodes arguments."
+    }
+  ]
+}

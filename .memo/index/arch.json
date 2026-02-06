@@ -1,0 +1,555 @@
+{
+  "modules": [
+    {
+      "name": "bach-primitives",
+      "description": "Foundational primitive types for BachLedger. Provides Ethereum-compatible Address (20 bytes), H256 (32 bytes), H160 (20 bytes) hash types, and type aliases for blockchain concepts. Core dependency for all other crates.",
+      "interfaces": "Exports Address, H256, H160, Hash (=H256), PrimitiveError; re-exports U256 from primitive-types; type aliases BlockHeight, Nonce, Gas (all u64). Depends on primitive-types, hex, thiserror. Optional features: serde, rlp.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "address",
+            "description": "Ethereum-compatible 20-byte address with hex parsing, validation, and display",
+            "interfaces": "Address struct with LEN=20, ZERO constant; from_bytes(), from_slice(), from_hex(), as_bytes(), as_bytes_mut(), is_zero(), to_hex(). AddressError for InvalidHex/InvalidLength"
+          },
+          {
+            "name": "hash",
+            "description": "256-bit and 160-bit hash types",
+            "interfaces": "H256 (32 bytes) with LEN=32, ZERO, from_bytes(), from_slice(), from_hex(), as_bytes(), is_zero(), to_hex(); H160 (20 bytes) with same interface; Hash = H256 alias. HashError for InvalidHex/InvalidLength"
+          },
+          {
+            "name": "error",
+            "description": "Unified error type for primitive operations",
+            "interfaces": "PrimitiveError enum wrapping AddressError and HashError with From impls"
+          }
+        ],
+        "relationships": "address and hash modules are independent; error unifies their errors. RLP and Serde implementations behind feature flags."
+      }
+    },
+    {
+      "name": "bach-crypto",
+      "description": "Cryptographic primitives for BachLedger. Provides Keccak-256 hashing, ECDSA signing/verification using secp256k1, public key recovery, and Ethereum-compatible address derivation.",
+      "interfaces": "Exports keccak256(), sign(), verify(), recover_public_key(), public_key_to_address(); types Signature, PublicKey, PrivateKey, CryptoError. Depends on bach-primitives for H256/Address types, k256 for ECDSA, sha3 for Keccak.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "hash",
+            "description": "Keccak-256 hashing using sha3 crate",
+            "interfaces": "keccak256(data: &[u8]) -> H256"
+          },
+          {
+            "name": "signature",
+            "description": "ECDSA operations with secp256k1 curve. EIP-2 compliant with low-s signature normalization.",
+            "interfaces": "sign(), verify(), recover_public_key(), public_key_to_address(); Signature struct with r/s/v components"
+          },
+          {
+            "name": "error",
+            "description": "Error types for cryptographic operations",
+            "interfaces": "CryptoError enum: SigningFailed, InvalidSignature, InvalidRecoveryId, RecoveryFailed, InvalidPrivateKey"
+          }
+        ],
+        "relationships": "hash provides keccak256 used by signature for address derivation; signature uses error for Result types"
+      }
+    },
+    {
+      "name": "bach-rlp",
+      "description": "RLP (Recursive Length Prefix) encoding/decoding for BachLedger. Provides Ethereum-compatible serialization using the rlp crate with custom implementations for bach-primitives types.",
+      "interfaces": "Exports encode(), decode(); re-exports Decodable, DecoderError, Encodable, Rlp, RlpStream from rlp crate; re-exports Address, H160, H256 with RLP support. Depends on bach-primitives (with rlp feature), rlp, bytes.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "utils",
+            "description": "RLP encoding utilities for integers and list headers",
+            "interfaces": "encode_u64(), encode_u128(), decode_u64(), list_header()"
+          }
+        ],
+        "relationships": "Main module provides generic encode/decode; utils provides specialized integer encoding with minimal bytes (no leading zeros)"
+      }
+    },
+    {
+      "name": "bach-evm",
+      "description": "EVM bytecode interpreter for BachLedger. Ethereum Yellow Paper compliant execution engine with support for modern EIPs (EIP-2929 cold/warm access, EIP-1559 BASEFEE, EIP-3198 CHAINID, post-merge PREVRANDAO).",
+      "interfaces": "Exports Interpreter, Environment, CallContext, BlockContext, TxContext, ExecutionResult, EvmError, Log, Opcode, Stack, U256, Memory, gas functions. Depends on bach-primitives, bach-crypto (keccak256).",
+      "internal": {
+        "submodules": [
+          {
+            "name": "error",
+            "description": "EVM error types and execution results",
+            "interfaces": "EvmError enum (OutOfGas, StackUnderflow, StackOverflow, InvalidJump, InvalidOpcode, InvalidMemoryAccess, StaticCallViolation, ReturnDataOutOfBounds, Revert, etc); ExecutionResult with success/gas_used/output/logs; Log struct"
+          },
+          {
+            "name": "opcode",
+            "description": "EVM opcode definitions per Yellow Paper Appendix H",
+            "interfaces": "Opcode enum (0x00-0xFF); methods from_byte(), push_size(), is_push(), dup_depth(), swap_depth(), log_topics(). Includes PUSH0, TLOAD, TSTORE, MCOPY, PREVRANDAO, BASEFEE"
+          },
+          {
+            "name": "gas",
+            "description": "Gas cost calculations per Yellow Paper and modern EIPs",
+            "interfaces": "Constants ZERO/BASE/VERYLOW/LOW/MID/HIGH, cold/warm costs (2100/2600/100), SSTORE costs (20000/2900), limits (MAX_STACK_SIZE=1024, MAX_CODE_SIZE=24576, MAX_INIT_CODE_SIZE=49152). Functions static_gas(), memory_gas(), copy_gas(), exp_gas(), sha3_gas(), log_gas()"
+          },
+          {
+            "name": "stack",
+            "description": "EVM stack implementation (max 1024 items, 256-bit each)",
+            "interfaces": "U256 type ([u8; 32] big-endian), Stack struct with push/pop/peek/peek_at/swap/dup/len/clear. U256 helpers: u64_to_u256, u128_to_u256, u256_to_u64, u256_to_usize, u256_is_zero. Arithmetic: u256_add/sub/cmp/lt/gt. Bitwise: u256_and/or/xor/not"
+          },
+          {
+            "name": "memory",
+            "description": "EVM memory (byte-addressable, expandable, 32-byte word aligned)",
+            "interfaces": "Memory struct with new(), size(), expand(offset, size), load(offset)->U256, store(offset, U256), store8(offset, u8), load_slice(offset, size), store_slice(offset, data), copy(dest, src, size)"
+          },
+          {
+            "name": "context",
+            "description": "Execution context structures",
+            "interfaces": "CallContext (address, caller, value, data, gas, is_static, depth), BlockContext (number, timestamp, gas_limit, coinbase, prevrandao, chain_id, base_fee), TxContext (origin, gas_price), Environment (combines call/block/tx contexts)"
+          },
+          {
+            "name": "interpreter",
+            "description": "Main bytecode interpreter with step-by-step or full execution",
+            "interfaces": "Interpreter::new(code, gas), run(&mut self, env) -> ExecutionResult, step(&mut self, env) -> EvmResult<()>, gas_remaining(), return_data(). Performs JUMPDEST analysis, gas accounting, opcode dispatch"
+          }
+        ],
+        "relationships": "interpreter orchestrates execution using stack, memory, gas, and context; opcode provides instruction definitions; error defines all failure modes; gas calculates costs per opcode and memory expansion; context provides environmental info for opcodes like ADDRESS, CALLER, TIMESTAMP"
+      }
+    },
+    {
+      "name": "bach-types",
+      "description": "Core blockchain data structures for BachLedger. Provides Transaction (Legacy, EIP-1559), Block (header + body), and Receipt types with Ethereum compatibility.",
+      "interfaces": "Exports SignedTransaction, LegacyTx, DynamicFeeTx, TxType, TxSignature, TransactionBody, AccessListItem; Block, BlockHeader, BlockBody, Bloom; Receipt, Log, TxStatus. Depends on bach-primitives, bach-crypto, bach-rlp.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "transaction",
+            "description": "Transaction types supporting Legacy (Type 0) and EIP-1559 (Type 2)",
+            "interfaces": "TxType enum (Legacy=0, AccessList=1, DynamicFee=2); LegacyTx (nonce, gas_price, gas_limit, to, value, data); DynamicFeeTx (chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value, data, access_list); AccessListItem; TxSignature (v, r, s); SignedTransaction with accessors nonce(), gas_limit(), to(), value(), data(), effective_gas_price(base_fee)"
+          },
+          {
+            "name": "block",
+            "description": "Block structures with Ethereum-compatible header fields",
+            "interfaces": "BlockHeader (parent_hash, ommers_hash, beneficiary, state_root, transactions_root, receipts_root, logs_bloom, difficulty, number, gas_limit, gas_used, timestamp, extra_data, mix_hash, nonce, base_fee_per_gas); BlockBody (transactions); Block (header + body); Bloom (2048-bit filter). Constants EMPTY_OMMERS_HASH, EMPTY_TRANSACTIONS_ROOT. Methods genesis(), is_genesis()"
+          },
+          {
+            "name": "receipt",
+            "description": "Transaction execution receipts with logs and bloom filter",
+            "interfaces": "TxStatus enum (Failure=0, Success=1); Log (address, topics, data) with bloom() method; Receipt (status, cumulative_gas_used, gas_used, logs, logs_bloom, contract_address) with is_success(), with_contract_address()"
+          }
+        ],
+        "relationships": "transaction provides tx types used in block body; block uses crypto (keccak256) for bloom filter; receipt aggregates logs with bloom from block module"
+      }
+    },
+    {
+      "name": "bach-storage",
+      "description": "RocksDB-backed storage layer for BachLedger. Provides persistent key-value storage with column families for accounts, storage, code, block headers, bodies, receipts, and metadata. Includes in-memory caching layer for efficient state access.",
+      "interfaces": "Exports Database, DbConfig, WriteBatchWrapper, cf module (column family names), ALL_CFS; StateDb, StateCache, CachedState; BlockDb; Account struct, StateReader/StateWriter/State traits; EMPTY_CODE_HASH, EMPTY_STORAGE_ROOT constants; StorageError, StorageResult. Depends on bach-primitives, bach-metrics, rocksdb.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "db",
+            "description": "RocksDB wrapper with column family support",
+            "interfaces": "Database struct with new(), open(), open_with_config(), close(), is_open(), get(), put(), delete(), batch(), write_batch(), path(). DbConfig (create_if_missing, max_open_files, write_buffer_size). WriteBatchWrapper for atomic commits. Column families: accounts, storage, code, headers, bodies, receipts, block_index, meta"
+          },
+          {
+            "name": "traits",
+            "description": "State access traits and Account type",
+            "interfaces": "Account (nonce, balance, code_hash, storage_root) with is_empty(), has_code(), to_bytes(), from_bytes(). StateReader trait: get_account(), get_storage(), get_code(), account_exists(), get_nonce(), get_balance(), get_code_hash(). StateWriter trait: set_account(), delete_account(), set_storage(), set_code(), increment_nonce(), add_balance(), sub_balance(). State = StateReader + StateWriter"
+          },
+          {
+            "name": "state",
+            "description": "State database and caching layers",
+            "interfaces": "StateDb (RocksDB-backed) implementing StateReader/StateWriter with commit(cache). StateCache (in-memory HashMap-based) with clear(), account_count(), storage_count(), is_empty(). CachedState (layered) reads cache first then falls back to underlying, exposes cache(), into_cache()"
+          },
+          {
+            "name": "block",
+            "description": "Block storage for headers, bodies, receipts",
+            "interfaces": "BlockDb with put/get/delete_header(), put/get/delete_body(), put/get/delete_receipts(), put/get/delete_hash_by_number(), put/get_meta(), set/get_latest_block(), set/get_finalized_block()"
+          },
+          {
+            "name": "error",
+            "description": "Storage error types",
+            "interfaces": "StorageError enum: RocksDb, Serialization, Deserialization, NotFound, InvalidColumnFamily, NotOpen, AlreadyOpen, InvalidFormat, Io. StorageResult<T> type alias"
+          }
+        ],
+        "relationships": "db provides low-level RocksDB access; traits defines Account and state access interfaces; state implements traits using db; block uses db for block-specific storage. CachedState layers over StateDb for transaction execution."
+      }
+    },
+    {
+      "name": "bach-metrics",
+      "description": "Observability and metrics collection for BachLedger. Provides thread-safe histogram, counter, and gauge metrics with JSON export capability.",
+      "interfaces": "Exports Histogram, Metrics, MetricsCollector, MetricsSnapshot; timed! macro for timing code blocks. Depends on parking_lot, serde, serde_json, tracing. No bach-* dependencies.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "histogram",
+            "description": "Histogram for latency/value distribution tracking",
+            "interfaces": "Histogram with new(), with_buckets(Vec<f64>), observe(value), mean(), total_count(). Default buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000] microseconds. Uses AtomicU64 for lock-free counting."
+          },
+          {
+            "name": "collector",
+            "description": "Thread-safe metrics storage and collection",
+            "interfaces": "Metrics struct with histogram(name, value), counter(name, delta), gauge(name, value); getters get_histogram_mean(), get_counter(), get_gauge(); iterators all_counters(), all_gauges(), all_histograms(). MetricsCollector wraps Arc<Metrics> with metrics(), shared() accessors."
+          },
+          {
+            "name": "export",
+            "description": "Metrics snapshot and JSON export",
+            "interfaces": "MetricsSnapshot with from_metrics(&Metrics), to_json(), to_json_compact(). Contains counters, gauges, histograms (as HistogramSummary with mean, count). Serializable via Serde."
+          }
+        ],
+        "relationships": "collector uses histogram for latency tracking; export creates snapshots from collector. All metric types use atomic operations and RwLock for thread safety."
+      }
+    },
+    {
+      "name": "bach-scheduler",
+      "description": "Seamless Scheduling algorithm for parallel transaction execution. The core innovation of BachLedger that enables deterministic parallel execution by analyzing transaction read/write sets, building dependency graphs, and generating parallel execution batches.",
+      "interfaces": "Exports StateKey, TxId, OwnershipTable, RWSet, ConflictSet, DependencyGraph, DependencyType, Scheduler, ExecutionBatch, ScheduleResult, SchedulerError, SchedulerResult. Depends on bach-primitives, bach-types, bach-evm, bach-metrics, dashmap, parking_lot, thiserror.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "state_key",
+            "description": "State key identifiers for ownership tracking",
+            "interfaces": "StateKey struct (address: Address, slot: H256) with new(), balance(addr), nonce(addr), code(addr). TxId newtype (u32) with new(), as_u32(), From<u32>, From<usize>. Both Hash+Eq for use as map keys."
+          },
+          {
+            "name": "rw_set",
+            "description": "Read/write set tracking for conflict detection",
+            "interfaces": "RWSet with reads/writes HashSets; record_read(), record_write(), reads_key(), writes_key(); conflict detection: has_raw_dependency(), has_waw_conflict(), has_war_conflict(), get_conflicts(). ConflictSet categorizes conflicts as raw/waw/war with has_conflicts(), total_conflicts()."
+          },
+          {
+            "name": "ownership",
+            "description": "Ownership table for runtime conflict prevention",
+            "interfaces": "OwnershipTable using DashMap for concurrent access. try_acquire(key, tx) -> Result<(), TxId> (acquires or returns current owner), release(key, tx), release_all(tx), get_owner(), is_owner(), get_owned_keys(), len(), clear(). Prevents write-write conflicts at runtime."
+          },
+          {
+            "name": "dependency",
+            "description": "Dependency graph for transaction ordering",
+            "interfaces": "DependencyType enum (ReadAfterWrite, WriteAfterWrite, WriteAfterRead). DependencyGraph with build(rw_sets) static constructor; add_transaction(), add_dependency(), remove_dependency(); get_dependents(), get_dependencies(), has_dependencies(), in_degree(); topological_sort() using Kahn's algorithm; generate_batches() returns Vec<Vec<TxId>> of parallel batches. Detects circular dependencies."
+          },
+          {
+            "name": "scheduler",
+            "description": "Main scheduler orchestrating parallel execution",
+            "interfaces": "Scheduler with new(), with_max_retries(). Transaction management: register_transaction(), register_transactions(), update_rw_set(), increment_retry(). Scheduling: schedule() -> ScheduleResult, schedule_from_rw_sets(). Ownership: acquire_ownership(), release_ownership(), ownership_table(). ExecutionBatch (batch_index, transactions). ScheduleResult (batches, total_transactions, max_parallelism, dependency_count) with parallelism_ratio(), estimated_speedup()."
+          },
+          {
+            "name": "error",
+            "description": "Scheduler error types",
+            "interfaces": "SchedulerError enum: TxNotFound, CircularDependency, OwnershipConflict{owner, requester}, MaxRetriesExceeded, InvalidIndex, Aborted. SchedulerResult<T> type alias."
+          }
+        ],
+        "relationships": "state_key provides identifiers used throughout; rw_set tracks transaction state access for dependency analysis; ownership provides runtime conflict prevention during execution; dependency builds DAG from rw_sets and generates parallel batches; scheduler orchestrates the full workflow using all components. Algorithm: analyze RW sets -> build dependency graph -> generate batches via topological levels -> execute batches in parallel -> validate no conflicts."
+      }
+    },
+    {
+      "name": "bach-core",
+      "description": "Core orchestration for BachLedger. Ties together block execution pipeline, transaction execution flow, state management, and component coordination. The main execution engine that processes blocks and transactions.",
+      "interfaces": "Exports BlockExecutor, BlockExecutionResult, ExecutionState, ExecutionError, ExecutionResult. Depends on bach-primitives, bach-types, bach-crypto, bach-storage, bach-evm, bach-scheduler, bach-txpool, bach-metrics.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "executor",
+            "description": "Block and transaction execution engine",
+            "interfaces": "BlockExecutor with new(chain_id), with_state(state, chain_id), execute_block(block)->BlockExecutionResult, execute_transaction(tx, block_ctx, cumulative_gas)->Receipt, state(), state_mut(), into_state(). ExecutionState wraps StateCache with get/set_account(), get/set_code(), get/set_storage(), cache(), into_cache(). BlockExecutionResult contains receipts, state_root, gas_used, logs_bloom. MIN_TX_GAS=21000."
+          },
+          {
+            "name": "error",
+            "description": "Execution error types",
+            "interfaces": "ExecutionError enum: InvalidBlock, InvalidTransaction{tx_hash, reason}, Evm(EvmError), Storage(StorageError), InsufficientGas{required, available}, InsufficientBalance{required, available}, NonceMismatch{expected, got}, SenderRecovery, BlockGasLimitExceeded{used, limit}, Internal. ExecutionResult<T> type alias."
+          }
+        ],
+        "relationships": "executor uses EVM interpreter for contract execution, storage for state access, crypto for sender recovery and address derivation. Transaction flow: recover sender -> validate nonce -> check balance -> deduct gas -> execute EVM -> refund unused gas -> pay miner."
+      }
+    },
+    {
+      "name": "bach-consensus",
+      "description": "TBFT (Tendermint-like BFT) consensus for BachLedger. Provides Byzantine fault-tolerant consensus with 2/3+ voting thresholds, proposer rotation, and finality guarantees.",
+      "interfaces": "Exports TbftConsensus, TbftConfig, Step, ConsensusMessage; Vote, VoteType, Proposal, Commit, Validator, ValidatorSet; ConsensusError, ConsensusResult. Depends on bach-primitives, bach-types, bach-crypto, bach-metrics.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "tbft",
+            "description": "TBFT consensus state machine",
+            "interfaces": "TbftConsensus with new(config, validator_set), start_height(height), on_proposal(proposal), propose_block(block_hash, timestamp), on_vote(vote), on_timeout(height, round, step), take_messages(), is_proposer(), is_finalized(height), get_commit(height), update_validators(), validator_set(). Step enum: NewRound, Propose, Prevote, Precommit, Commit. TbftConfig: address, propose_timeout, prevote_timeout, precommit_timeout. ConsensusMessage enum: Proposal, Vote, CreateBlock, Finalized."
+          },
+          {
+            "name": "types",
+            "description": "Consensus data types",
+            "interfaces": "VoteType enum (Prevote, Precommit). Vote with vote_type, height, round, block_hash, voter, signature; is_nil(), signing_message(). Proposal with height, round, block_hash, proposer, timestamp, signature; signing_message(). Validator with address, voting_power. ValidatorSet with from_validators(), add(), get(), contains(), total_power(), proposer(height, round), has_two_thirds(power), has_one_third(power). Commit with height, round, block_hash, votes; add_vote(), voting_power()."
+          },
+          {
+            "name": "error",
+            "description": "Consensus error types",
+            "interfaces": "ConsensusError enum: InvalidProposal, InvalidVote{voter, reason}, NotValidator, DuplicateVote, InvalidSignature, WrongHeight{expected, got}, WrongRound{expected, got}, BlockNotFound, Timeout{height, round}, Internal. ConsensusResult<T> type alias."
+          }
+        ],
+        "relationships": "tbft implements the state machine using types for messages; crypto used for vote/proposal signature verification via recover_public_key. Consensus flow: NewRound -> Propose (proposer broadcasts) -> Prevote (2/3+ for polka) -> Precommit (2/3+ for commit) -> Commit (finalized). Round-robin proposer selection: (height + round) % validator_count."
+      }
+    },
+    {
+      "name": "bach-txpool",
+      "description": "Transaction pool for BachLedger. Manages pending and queued transactions with nonce ordering, gas price prioritization, replacement rules (10% bump), and pool size limits. Enables efficient block production by organizing transactions by sender account.",
+      "interfaces": "Exports TxPool, PoolConfig, PooledTransaction; TxPoolError, TxPoolResult. Depends on bach-primitives (Address, H256), bach-types (SignedTransaction), bach-crypto, bach-metrics, dashmap, parking_lot.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "pool",
+            "description": "Main transaction pool implementation with pending/queued separation",
+            "interfaces": "TxPool with new(config), with_defaults(); add(tx, sender, hash), remove(hash); get_by_hash(), get_pending(limit), get_nonce(); set_nonce(), set_base_fee(), clear(); len(), is_empty(), pending_len(), queued_len(), pending_hashes(). PoolConfig (max_pending=4096, max_queued=1024, max_per_account=16, block_gas_limit=30M, min_gas_price=1gwei, base_fee). PooledTransaction (tx, sender, hash, effective_gas_price) with nonce(), gas_limit(). AccountTxs internal struct for per-account pending/queued BTreeMaps. Constants: MIN_GAS_PRICE_BUMP=10%, MAX_NONCE_GAP=64, MIN_GAS_LIMIT=21000."
+          },
+          {
+            "name": "error",
+            "description": "Transaction pool error types",
+            "interfaces": "TxPoolError enum: InvalidSignature, NonceTooLow{expected,got}, NonceGapTooLarge{current,tx_nonce}, InsufficientBalance{required,available}, GasLimitTooLow(u64), GasLimitExceedsBlock{gas_limit,block_limit}, GasPriceTooLow(u128), AlreadyExists(H256), PoolFull(usize), Underpriced{old,new}, RecoveryFailed(String). TxPoolResult<T> type alias."
+          }
+        ],
+        "relationships": "pool uses error for validation failures. Transactions organized per-account with pending (ready, sequential nonces from state_nonce) and queued (waiting for nonce gaps to fill). promote_queued() moves queued->pending when gaps filled. DashMap for by_hash index enables O(1) lookup; BTreeMap for per-account nonce ordering."
+      }
+    },
+    {
+      "name": "bach-network",
+      "description": "P2P networking for BachLedger. Provides TCP-based peer discovery, connection management, protocol handshake with chain validation, message broadcasting, and keep-alive. Async implementation using tokio runtime.",
+      "interfaces": "Exports NetworkService, NetworkConfig, NetworkEvent; PeerConnection, PeerInfo, PeerManager, PeerState; Message, MessageType, PeerId, Handshake, BlockAnnounce, TxBroadcast, GetBlock; NetworkError, NetworkResult. Depends on bach-primitives (H256), bach-types, bach-metrics, tokio, serde, serde_json, bytes, parking_lot, rand.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "service",
+            "description": "Main network service handling connections and message routing",
+            "interfaces": "NetworkService with new(config), take_events(), start(), stop(); is_running(), peer_count(), connected_peers(), get_peer(), peer_id(); set_height(), height(); broadcast(msg), send_to(peer_id, msg), connect(addr). NetworkConfig (listen_addr=0.0.0.0:30303, bootstrap_peers, max_peers=50, protocol_version=1, chain_id=1, genesis_hash, peer_id). NetworkEvent enum: PeerConnected(PeerId), PeerDisconnected(PeerId), Message{peer_id, message}. Uses mpsc channels for event distribution."
+          },
+          {
+            "name": "peer",
+            "description": "Peer connection and management",
+            "interfaces": "PeerState enum: Connecting, Connected, Disconnecting, Disconnected. PeerInfo (id, addr, state, height, connected_at, last_message_at, inbound) with touch(), set_height(). PeerConnection (peer_id, addr, sender) with send(msg). PeerManager with new(max_peers); add_peer(), remove_peer(), get_peer(), get_connection(); update_state(), update_height(), touch_peer(); peer_ids(), connected_peers(), peer_count(), can_accept(), has_peer(). Functions read_message(), write_message() for TCP framing."
+          },
+          {
+            "name": "types",
+            "description": "Network message types and protocol structures",
+            "interfaces": "PeerId (32-byte identifier) with from_bytes(), random(), as_bytes(). MessageType enum: Handshake=0, Ping=1, Pong=2, BlockAnnounce=10, TxBroadcast=11, Consensus=20, GetBlock=30, Block=31, Disconnect=255. Message (msg_type, payload) with new(), empty(), ping(), pong(), disconnect(), encode(), decode(). Handshake (version, chain_id, genesis_hash, height, peer_id). BlockAnnounce (hash, number, parent_hash). TxBroadcast (hash, data). GetBlock with by_hash(), by_number(). Wire format: [length:4][type:1][payload:N]."
+          },
+          {
+            "name": "error",
+            "description": "Network error types",
+            "interfaces": "NetworkError enum: Io(std::io::Error), ConnectionFailed(String), PeerNotFound(String), AlreadyConnected(String), InvalidMessage(String), Protocol(String), Timeout(String), NotRunning, AlreadyRunning, Send(String), ChannelClosed. NetworkResult<T> type alias."
+          }
+        ],
+        "relationships": "service orchestrates connections using peer for management; types defines protocol messages; error provides failure modes. Connection flow: TCP connect -> handshake exchange -> validate chain_id/genesis_hash -> spawn reader/writer tasks -> emit PeerConnected event. Message flow: service.broadcast -> iterate peers -> conn.send(msg) via mpsc channel -> writer task writes to TCP."
+      }
+    },
+    {
+      "name": "bach-rpc",
+      "description": "JSON-RPC 2.0 server for BachLedger. Provides Ethereum-compatible RPC interface with HTTP server (axum), CORS support, and full method registry for eth_*, net_*, web3_* namespaces.",
+      "interfaces": "Exports RpcServer, ServerConfig, RpcHandler, RpcContext, MethodRegistry; JsonRpcRequest, JsonRpcResponse, JsonRpcError; RpcBlock, RpcTransaction, RpcReceipt, RpcLog, BlockId, CallRequest. Depends on bach-primitives, bach-crypto, bach-types, bach-rlp, bach-evm, bach-storage, bach-txpool, bach-core, axum, tower, tokio.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "server",
+            "description": "HTTP server with axum framework",
+            "interfaces": "RpcServer with new(config, handler), run(), listen_addr(). ServerConfig (listen_addr=0.0.0.0:8545, max_body_size=10MB, request_timeout=30s, enable_cors=true). Uses tower middleware for tracing, body limits, CORS."
+          },
+          {
+            "name": "handler",
+            "description": "Request dispatcher and method registry",
+            "interfaces": "RpcHandler with new(ctx), handle_request(). RpcContext (state_db, block_db, txpool, executor, chain_id, gas_price) with new_executor(). MethodRegistry with new(), register(), dispatch(), has_method(), method_names(). 19 methods registered: 14 eth_* + 3 net_* + 2 web3_*."
+          },
+          {
+            "name": "methods/eth",
+            "description": "Ethereum namespace RPC methods",
+            "interfaces": "eth_chainId, eth_blockNumber, eth_gasPrice, eth_getBalance, eth_getTransactionCount, eth_getCode, eth_getStorageAt, eth_call, eth_estimateGas, eth_sendRawTransaction, eth_getBlockByNumber, eth_getBlockByHash, eth_getTransactionByHash, eth_getTransactionReceipt."
+          },
+          {
+            "name": "methods/net",
+            "description": "Network namespace RPC methods",
+            "interfaces": "net_version, net_listening, net_peerCount."
+          },
+          {
+            "name": "methods/web3",
+            "description": "Web3 namespace RPC methods",
+            "interfaces": "web3_clientVersion, web3_sha3 (keccak256 hash of input data)."
+          },
+          {
+            "name": "types",
+            "description": "JSON-RPC request/response types",
+            "interfaces": "JsonRpcId (String/Number/Null), JsonRpcRequest (jsonrpc, method, params, id), JsonRpcResponse with success()/error(). RpcBlock, RpcTransaction, RpcReceipt, RpcLog for JSON serialization. BlockId enum (Number, Latest, Pending, Earliest). CallRequest (from, to, gas, gasPrice, value, data)."
+          },
+          {
+            "name": "error",
+            "description": "JSON-RPC error types",
+            "interfaces": "JsonRpcError with code/message/data fields; standard errors: parse_error(-32700), invalid_request(-32600), method_not_found(-32601), invalid_params(-32602), internal_error(-32603). RpcError enum: Bind, Handler, Storage, Pool, Execution, Serialization."
+          }
+        ],
+        "relationships": "server creates HTTP endpoint routing to handler; handler dispatches to method registry; methods use RpcContext to access state_db, block_db, txpool. Flow: HTTP POST / -> handle_rpc() -> RpcHandler::handle_request() -> MethodRegistry::dispatch() -> specific method handler -> JsonRpcResponse."
+      }
+    },
+    {
+      "name": "bach-sdk",
+      "description": "Rust SDK for BachLedger blockchain. Provides client library for RPC communication, wallet management with secure key handling, transaction building, and Solidity ABI encoding/decoding.",
+      "interfaces": "Exports BachClient, Wallet, TxBuilder; Transport trait, HttpTransport, MockTransport; SdkError; abi module (encode/decode/Token types); contract helpers (erc20). Depends on bach-primitives, bach-crypto, bach-types, reqwest (optional), k256, zeroize.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "client",
+            "description": "RPC client for BachLedger nodes",
+            "interfaces": "BachClient with connect(url), new_mock(), with_transport(); chain_id(), gas_price(), block_number(); get_balance(), get_nonce(), get_code(); get_block(), get_block_by_hash(), get_transaction(), get_receipt(); send_raw_transaction(), send_transaction(); call(), estimate_gas(). Uses Transport trait for pluggable backends."
+          },
+          {
+            "name": "wallet",
+            "description": "Secure private key management (not Clone to prevent accidental key duplication)",
+            "interfaces": "Wallet with new_random(), from_private_key([u8;32]), from_private_key_hex(str); address(), public_key(), sign_hash(), sign_message(). Uses zeroize for secure key cleanup. Debug impl hides private key."
+          },
+          {
+            "name": "tx_builder",
+            "description": "Fluent transaction builder",
+            "interfaces": "TxBuilder with new(chain_id); nonce(), gas_limit(), gas_price(), max_fee(), max_priority_fee(); to(), value(), data(); sign_legacy(), sign_eip1559(). Creates SignedTransaction ready for submission."
+          },
+          {
+            "name": "transport",
+            "description": "Pluggable RPC transport layer",
+            "interfaces": "Transport trait: request_json(method, params) -> Value. HttpTransport (reqwest-based, feature=http). MockTransport for testing with predefined responses."
+          },
+          {
+            "name": "abi",
+            "description": "Solidity ABI encoding/decoding",
+            "interfaces": "Token enum (Uint, Int, Address, Bool, Bytes, FixedBytes, String, Array, Tuple). encode_function_call(), decode_output(). Type parsing for function signatures."
+          },
+          {
+            "name": "contract",
+            "description": "Smart contract interaction helpers",
+            "interfaces": "Contract struct with encode_call(), decode_output(). erc20() helper for standard ERC20 interface (balanceOf, transfer, approve, etc)."
+          }
+        ],
+        "relationships": "client uses transport for RPC calls; wallet provides signing for tx_builder; abi encodes contract call data; contract uses abi for ERC20/other interfaces. Wallet intentionally not Clone for security."
+      }
+    },
+    {
+      "name": "bach-cli",
+      "description": "Command-line interface for BachLedger blockchain. Provides keygen (keys, keystores, node identity), account management, transaction operations, and blockchain queries. Uses clap for argument parsing.",
+      "interfaces": "Binary 'bach' with subcommands: keygen, account, tx, query, config. Exports Config, CliError, Output. Depends on bach-sdk, bach-primitives, bach-crypto, clap, k256, aes, scrypt for encrypted keystore.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "commands/keygen",
+            "description": "Cryptographic material generation",
+            "interfaces": "keygen new (--show-private-key, -o file, -p password), keygen node-key, keygen batch (-c count), keygen inspect, keygen decrypt, keygen derive. Encrypted keystore uses scrypt KDF + AES-CTR."
+          },
+          {
+            "name": "commands/account",
+            "description": "Account management",
+            "interfaces": "account create, account list, account balance <address>."
+          },
+          {
+            "name": "commands/tx",
+            "description": "Transaction operations",
+            "interfaces": "tx send (--to, --amount, --key), tx deploy (--bytecode, --key), tx call (--contract, --data, --key)."
+          },
+          {
+            "name": "commands/query",
+            "description": "Blockchain state queries",
+            "interfaces": "query block <number|latest>, query tx <hash>, query chain-id, query gas-price."
+          },
+          {
+            "name": "config",
+            "description": "CLI configuration",
+            "interfaces": "Config with rpc_url, chain_id, gas_limit. load(), save(). Stored in ~/.bach/config.toml."
+          },
+          {
+            "name": "output",
+            "description": "Formatted output (human-readable or JSON)",
+            "interfaces": "Output with --json flag support. field(), field_u64(), message(), print()."
+          }
+        ],
+        "relationships": "main.rs parses args with clap, dispatches to command modules; all commands use bach-sdk for RPC; keygen uses k256 for ECDSA, scrypt/aes for keystore encryption."
+      }
+    },
+    {
+      "name": "bach-node",
+      "description": "BachLedger node binary. Orchestrates all components into a running blockchain node with RPC server, block production, and transaction processing. Entry point for running the blockchain.",
+      "interfaces": "Binary 'bachledger' with CLI args: --datadir, --chain-id, --rpc, --rpc-addr, --gas-limit, --block-time, --genesis, --log-level. Depends on all core crates: bach-primitives, bach-types, bach-crypto, bach-storage, bach-txpool, bach-core, bach-metrics, bach-rpc.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "node",
+            "description": "Main node orchestration",
+            "interfaces": "Node with new(config), run(), stop(), is_running(); state_db(), block_db(), txpool(), executor(), chain_id(); get_latest_block_number(), get_block_by_number(), get_block_by_hash(); get_balance(), get_nonce(), get_code(), get_storage(); produce_block() for block production from pending txs."
+          },
+          {
+            "name": "config",
+            "description": "Node configuration",
+            "interfaces": "NodeConfig (datadir, chain_id, rpc, genesis, block). RpcConfig (enabled, listen_addr, max_connections). BlockConfig (gas_limit, block_time). GenesisConfig with alloc map."
+          },
+          {
+            "name": "genesis",
+            "description": "Genesis block initialization",
+            "interfaces": "GenesisBuilder with init_genesis() to create block 0 and fund accounts. compute_block_hash(), encode/decode_header(), encode/decode_body(), encode_receipts()."
+          },
+          {
+            "name": "cli",
+            "description": "Command-line argument parsing",
+            "interfaces": "Cli with parse_args(). Default: datadir=./data, chain_id=1337, rpc=true, rpc_addr=0.0.0.0:8545, gas_limit=30M, block_time=1s."
+          }
+        ],
+        "relationships": "main.rs parses CLI, loads genesis, creates Node, optionally spawns RpcServer, runs main_loop. Node owns state_db, block_db, txpool, executor. Block production: get_pending() from txpool -> build Block -> executor.execute_block() -> store in block_db -> update txpool nonces."
+      }
+    },
+    {
+      "name": "bach-e2e",
+      "description": "End-to-end integration testing framework for BachLedger. Provides test harness with isolated state, transaction builders, and pre-compiled contract bytecode for comprehensive testing. Design philosophy: Simple (one command), Declarative (WHAT not HOW), Isolated (fresh state), Fast (tempdir).",
+      "interfaces": "Exports TestHarness, TestAccount, ReceiptAssertions, TxBuilder, EtherDenom, ExecutionResult; contracts module with pre-compiled bytecode; E2EError (Setup/Transaction/Assertion/Storage/Evm). Depends on bach-core (BlockExecutor, ExecutionState), bach-crypto (sign), bach-types, bach-primitives.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "harness",
+            "description": "Test environment setup and execution. Constants: TEST_CHAIN_ID=1337, DEFAULT_GAS_LIMIT=1M, DEFAULT_GAS_PRICE=10gwei, DEFAULT_BLOCK_GAS_LIMIT=30M, DEFAULT_BASE_FEE=1gwei, FUNDED_BALANCE=100ETH",
+            "interfaces": "TestHarness with new(), with_chain_id(); create_account(), create_account_from_hex(), fund_account(); balance(), nonce(), code(), storage(); build_legacy_tx(), build_eip1559_tx(); transfer(), deploy_contract(), call(), call_with_value(), send_tx(); execute_block(), mine_empty_block(); build_block_header(), build_block(), advance_time(), set_beneficiary(), block_number(); add_pending_tx(). TestAccount with random(), from_hex(), address(), nonce(), next_nonce(), sign(). Debug hides private key. ReceiptAssertions trait: assert_success(), assert_failure(), assert_gas_used(), assert_contract_created()"
+          },
+          {
+            "name": "builder",
+            "description": "Fluent transaction builder and Ether denomination helpers",
+            "interfaces": "TxBuilder (from, to, value, data, gas_limit, gas_price, nonce) with transfer(from, to, value), deploy(from, bytecode), call(from, to); chainable: data(), value(), gas_limit(), gas_price(), nonce(), is_deploy(). EtherDenom trait for u64/u128/i32: wei(), gwei(), ether() enabling syntax like 1.ether(). ExecutionResult (success, gas_used, contract_address, error) with success(), failure(), error(), gas_cost()"
+          },
+          {
+            "name": "contracts",
+            "description": "Pre-compiled EVM bytecode for tests without Solidity compiler. Constants: ZERO_ADDRESS, ONE_ETHER, ONE_GWEI, DEFAULT_GAS_LIMIT=1M, TRANSFER_GAS=21000, SLOT_ZERO",
+            "interfaces": "SimpleStorage contract: SIMPLE_STORAGE_INIT_CODE, SIMPLE_STORAGE_RUNTIME, SIMPLE_STORAGE_SELECTORS (store=0x6057361d, retrieve=0x2e64cec1); encode_store(value), encode_retrieve(). Counter contract: COUNTER_INIT_CODE, COUNTER_RUNTIME, COUNTER_SELECTORS (increment=0xd09de08a, get=0x6d4ce63c); encode_increment(), encode_get(). Return42: RETURN_42_INIT_CODE, RETURN_42_RUNTIME (minimal contract returning 0x42). Helper: decode_uint256(data)"
+          },
+          {
+            "name": "scenarios",
+            "description": "Comprehensive test scenarios verifying transaction lifecycle",
+            "interfaces": "Test categories: Value Transfer (simple_transfer, transfer_to_new, zero_value, self_transfer, multiple_sequential); Contract Deployment (deploy_simple, deploy_with_storage, deploy_multiple); Contract Calls (call_to_eoa); Multi-Transaction Blocks (multi_tx_block, block_with_many_txs); Error Cases (insufficient_balance, nonce_mismatch); Gas (gas_consumption, gas_refund); Block Progression (block_number, beneficiary_fees); State Persistence (state_across_blocks, nonce_persistence); EIP-1559 (eip1559_transaction); Edge Cases (max_value_transfer, known_private_key)"
+          }
+        ],
+        "relationships": "harness creates isolated test environment using tempdir and BlockExecutor with ExecutionState; TestAccount::sign() uses bach_crypto::sign(); builder creates transactions; contracts provides pre-compiled bytecode following init code pattern (CODECOPY+RETURN runtime) + runtime code with function dispatcher; scenarios combine for comprehensive integration tests. EIP-1559 tx building sets max_priority_fee=2gwei."
+      }
+    },
+    {
+      "name": "bach-evm-tests",
+      "description": "Ethereum test suite integration for BachLedger EVM. Runs official ethereum/tests against bach-evm to verify Yellow Paper compliance. Supports VMTests (opcode-level) and GeneralStateTests (transaction execution).",
+      "interfaces": "Exports VmTestRunner, StateTestRunner, TestRunner, TestStats; TestError, TestResult; SUPPORTED_FORKS list; all types from types module. Depends on bach-primitives, bach-crypto, bach-evm, bach-storage, thiserror, serde, serde_json, hex, tracing.",
+      "internal": {
+        "submodules": [
+          {
+            "name": "error",
+            "description": "Test error types",
+            "interfaces": "TestError enum: Io(std::io::Error), Json(serde_json::Error), Hex(String), Parse(String), Execution(String), Assertion(String), Unsupported(String). TestResult<T> type alias."
+          },
+          {
+            "name": "types",
+            "description": "JSON parsing for ethereum/tests format with custom hex deserializers",
+            "interfaces": "HexBytes (Vec<u8>), HexU256 ([u8;32]), HexU64 (u64), HexAddress ([u8;20]), HexH256 ([u8;32]) with custom Deserialize impls handling 0x prefix. VmTestFile = HashMap<String, VmTestCase>; VmTestCase (env, exec, gas, logs, out, pre, post); VmEnv (currentCoinbase/Difficulty/GasLimit/Number/Timestamp/BaseFee/Random); VmExec (address, caller, code, data, gas, gasPrice, origin, value). StateTestFile = HashMap<String, StateTestCase>; StateTestCase (env, pre, transaction, post); StateEnv; StateTransaction (data[], gasLimit[], gasPrice, maxFeePerGas, nonce, secretKey, to, value[], accessLists); AccessListEntry; PostStateResult (hash, indexes, logs, txbytes, expectException); IndexSelector (data, gas, value). AccountState (balance, code, nonce, storage)."
+          },
+          {
+            "name": "vm_test",
+            "description": "VMTest runner for opcode-level testing",
+            "interfaces": "VmTestRunner with new(verbose), run_file(path)->VmTestResults, run_test(name, test). Internal: build_environment() converts test case to Environment, check_result() validates gas/output/state. VmTestResults (file, passed: Vec<String>, failed: Vec<(String,String)>) with total(), pass_rate(). Helper u256_to_u128() converts [u8;32] to u128 with saturation."
+          },
+          {
+            "name": "state_test",
+            "description": "StateTest runner for transaction execution testing",
+            "interfaces": "SUPPORTED_FORKS = [Berlin, London, Paris, Shanghai, Cancun]. StateTestRunner with new(fork, verbose), run_file(path)->StateTestResults. Internal: run_test_case() selects tx parameters by index, builds environment, runs interpreter, checks expected exception. StateTestResults (file, passed, failed, skipped: Vec<(String,String)>) with executed(), total(), pass_rate(). Helper parse_address(), u256_to_u128()."
+          },
+          {
+            "name": "runner",
+            "description": "Test orchestration and statistics aggregation",
+            "interfaces": "TestStats (total, passed, failed, skipped, duration: Duration, failures: Vec<(String,String)>) with new(), add_vm_results(), add_state_results(), pass_rate(), print_summary(). TestRunner with new(fork, verbose), run_vm_tests(dir)->TestStats, run_state_tests(dir)->TestStats, run_all(tests_dir)->TestStats. Recursive directory scanning for .json files. Looks for VMTests/ and GeneralStateTests/ subdirectories."
+          }
+        ],
+        "relationships": "error provides TestError/TestResult used by all; types provides JSON deserialization for ethereum/tests format; vm_test uses types to parse test files and bach-evm Interpreter to execute; state_test similarly for stateful tests with fork support; runner orchestrates vm_test/state_test and aggregates TestStats. Flow: TestRunner.run_all() -> scan directories -> VmTestRunner/StateTestRunner.run_file() -> deserialize JSON -> run_test() -> create Environment from test params -> Interpreter.run() -> compare results -> aggregate stats."
+      }
+    }
+  ],
+  "relationships": "bach-primitives is the foundational crate providing Address, H256, U256 types used by all others. bach-crypto depends on bach-primitives for H256/Address. bach-rlp depends on bach-primitives (with rlp feature) for type serialization. bach-evm depends on both bach-primitives and bach-crypto (keccak256). bach-types depends on bach-primitives, bach-crypto, and bach-rlp to define complete blockchain data structures. bach-storage depends on bach-primitives and bach-metrics for persistent state/block storage. bach-metrics is standalone for observability. bach-scheduler depends on bach-primitives, bach-types, bach-evm, and bach-metrics to implement parallel transaction scheduling. bach-consensus depends on bach-primitives, bach-types, and bach-crypto for BFT consensus. bach-txpool depends on bach-primitives, bach-types, bach-crypto, and bach-metrics for transaction pool management. bach-network depends on bach-primitives, bach-types, and bach-metrics for P2P networking with async tokio runtime. bach-rpc depends on most crates to provide JSON-RPC server. bach-sdk depends on primitives, crypto, types for client library. bach-cli depends on bach-sdk for user-facing CLI. bach-node depends on all core crates as the main node binary. bach-core is the orchestration layer implementing block execution. bach-e2e and bach-evm-tests are testing crates. Full dependency chain: primitives -> crypto/rlp/metrics -> types, evm, storage -> scheduler, consensus, txpool, network -> core, rpc -> sdk -> cli; node integrates all."
+}
