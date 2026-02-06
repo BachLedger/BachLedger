@@ -31,4 +31,4 @@ mod error;
 mod executor;
 
 pub use error::{ExecutionError, ExecutionResult};
-pub use executor::{BlockExecutionResult, BlockExecutor};
+pub use executor::{BlockExecutionResult, BlockExecutor, ExecutionState};

@@ -1,0 +1,29 @@
+[package]
+name = "bach-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for BachLedger blockchain"
+
+[[bin]]
+name = "bach"
+path = "src/main.rs"
+
+[dependencies]
+bach-sdk = { path = "../bach-sdk" }
+bach-primitives = { path = "../bach-primitives" }
+bach-crypto = { path = "../bach-crypto" }
+
+tokio = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+dirs = "5"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

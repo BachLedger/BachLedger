@@ -15,6 +15,9 @@ members = [
     "crates/bach-metrics",
     "crates/bach-core",
     "crates/bach-node",
+    "crates/bach-e2e",
+    "crates/bach-sdk",
+    "crates/bach-cli",
 ]
 
 [workspace.package]
@@ -39,6 +42,9 @@ bach-network = { path = "crates/bach-network" }
 bach-txpool = { path = "crates/bach-txpool" }
 bach-metrics = { path = "crates/bach-metrics" }
 bach-core = { path = "crates/bach-core" }
+bach-e2e = { path = "crates/bach-e2e" }
+bach-sdk = { path = "crates/bach-sdk" }
+bach-cli = { path = "crates/bach-cli" }
 
 # 密码学
 k256 = { version = "0.13", features = ["ecdsa", "ecdsa-core"] }
