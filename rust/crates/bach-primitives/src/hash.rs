@@ -134,6 +134,54 @@ impl From<[u8; 20]> for H160 {
     }
 }
 
+// Serde implementations (behind feature flag)
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use super::*;
+    use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for H256 {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_str(&self.to_hex())
+        }
+    }
+
+    impl<'de> Deserialize<'de> for H256 {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let s = String::deserialize(deserializer)?;
+            H256::from_hex(&s).map_err(de::Error::custom)
+        }
+    }
+
+    impl Serialize for H160 {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let hex = format!("0x{}", hex::encode(self.0));
+            serializer.serialize_str(&hex)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for H160 {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let s = String::deserialize(deserializer)?;
+            let s = s.strip_prefix("0x").unwrap_or(&s);
+            let bytes = hex::decode(s).map_err(de::Error::custom)?;
+            H160::from_slice(&bytes).map_err(de::Error::custom)
+        }
+    }
+}
+
 // RLP implementations (behind feature flag)
 #[cfg(feature = "rlp")]
 mod rlp_impl {

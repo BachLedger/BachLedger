@@ -1,19 +1,21 @@
 [package]
-name = "bach-consensus"
+name = "bach-evm-tests"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "TBFT consensus for BachLedger"
+description = "Ethereum test suite integration for BachLedger EVM"
 
 [dependencies]
 bach-primitives.workspace = true
-bach-types.workspace = true
 bach-crypto.workspace = true
-bach-metrics.workspace = true
+bach-evm.workspace = true
+bach-storage.workspace = true
 thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
 tracing.workspace = true
-parking_lot.workspace = true
 
 [dev-dependencies]
-bytes.workspace = true
+# Tests are run via `cargo test`

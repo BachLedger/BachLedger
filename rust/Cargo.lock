@@ -29,11 +29,11 @@ version = "0.1.0"
 dependencies = [
  "bach-crypto",
  "bach-metrics",
- "bach-network",
  "bach-primitives",
  "bach-types",
+ "bytes",
+ "parking_lot",
  "thiserror",
- "tokio",
  "tracing",
 ]
 
@@ -41,19 +41,17 @@ dependencies = [
 name = "bach-core"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "bach-consensus",
  "bach-crypto",
  "bach-evm",
  "bach-metrics",
- "bach-network",
  "bach-primitives",
  "bach-scheduler",
  "bach-storage",
  "bach-txpool",
  "bach-types",
+ "bytes",
+ "parking_lot",
  "thiserror",
- "tokio",
  "tracing",
 ]
 
@@ -84,6 +82,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bach-evm-tests"
+version = "0.1.0"
+dependencies = [
+ "bach-crypto",
+ "bach-evm",
+ "bach-primitives",
+ "bach-storage",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "bach-metrics"
 version = "0.1.0"
 dependencies = [
@@ -99,8 +112,13 @@ version = "0.1.0"
 dependencies = [
  "bach-metrics",
  "bach-primitives",
+ "bach-types",
  "bytes",
+ "hex",
+ "parking_lot",
+ "rand",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -175,8 +193,11 @@ dependencies = [
  "bach-metrics",
  "bach-primitives",
  "bach-types",
+ "bytes",
  "dashmap",
+ "k256",
  "parking_lot",
+ "rand",
  "thiserror",
  "tracing",
 ]
