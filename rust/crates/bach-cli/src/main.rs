@@ -5,6 +5,18 @@
 //! ## Usage
 //!
 //! ```bash
+//! # Keygen commands - Generate cryptographic materials
+//! bach keygen new                              # Generate new keypair
+//! bach keygen new --show-private-key           # Show private key in output
+//! bach keygen new -o key.json                  # Save to file
+//! bach keygen new -o key.json -p mypassword    # Save encrypted keystore
+//! bach keygen node-key                         # Generate node identity key
+//! bach keygen node-key -o node.key             # Save node key to file
+//! bach keygen batch -c 10 -o ./keys            # Generate 10 keypairs
+//! bach keygen inspect keystore.json            # Show keystore info
+//! bach keygen decrypt keystore.json -p pass    # Decrypt and show private key
+//! bach keygen derive -k 0x...                  # Derive address from private key
+//!
 //! # Account commands
 //! bach account create
 //! bach account list
@@ -62,6 +74,9 @@ enum Commands {
     /// Query blockchain state
     #[command(subcommand)]
     Query(commands::query::QueryCommand),
+    /// Generate cryptographic materials (keys, keystores, node identity)
+    #[command(subcommand)]
+    Keygen(commands::keygen::KeygenCommand),
     /// Show or edit configuration
     Config {
         /// Show current configuration
@@ -92,6 +107,7 @@ async fn main() {
         Commands::Account(cmd) => cmd.execute(&config, cli.json).await,
         Commands::Tx(cmd) => cmd.execute(&config, cli.json).await,
         Commands::Query(cmd) => cmd.execute(&config, cli.json).await,
+        Commands::Keygen(cmd) => cmd.execute(&config, cli.json).await,
         Commands::Config {
             show,
             set_rpc,
