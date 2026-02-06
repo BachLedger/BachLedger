@@ -1,0 +1,69 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of private compute contract
+enum GasAccountFunction {
+  // set admin
+  SET_ADMIN = 0;
+
+  // get admin
+  GET_ADMIN = 1;
+
+  // recharge gas
+  RECHARGE_GAS = 2;
+
+  // get balance
+  GET_BALANCE = 3;
+
+  // charge gas
+  CHARGE_GAS = 4;
+
+  // frozen account
+  FROZEN_ACCOUNT = 5;
+
+  // unfrozen account
+  UNFROZEN_ACCOUNT = 6;
+
+  // account status
+  ACCOUNT_STATUS = 7;
+
+  // refund gas
+  REFUND_GAS = 8;
+
+  // refund gas for vm
+  REFUND_GAS_VM = 9;
+
+  // charge gas for multi accounts
+  CHARGE_GAS_FOR_MULTI_ACCOUNT = 10;
+}
+
+message AccountMultiSign {
+  bytes payloads = 1;
+  bytes client_sign = 2;
+  bytes public_key_info = 3;
+}
+
+// account multi sign req
+message AccountMultiSignsReq {
+  repeated AccountMultiSign gas_multi_signs = 1;
+}
+
+message RechargeGas{
+  string address = 1;
+  int64 gas_amount = 2;
+}
+
+message RechargeGasReq {
+  repeated RechargeGas batch_recharge_gas = 1;
+}

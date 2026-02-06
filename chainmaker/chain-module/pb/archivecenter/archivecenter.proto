@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/archivecenter";
+
+
+
+import  "common/block.proto";
+import  "common/rwset.proto";
+import  "common/transaction.proto";
+
+package archivecenter;
+
+service ArchiveCenterServer {
+    // 注册接口   
+    rpc Register(ArchiveBlockRequest) returns (RegisterResp){} ;
+    // 归档区块接口
+    rpc ArchiveBlocks(stream ArchiveBlockRequest) returns (stream ArchiveBlockResp) {} ;
+
+    // 归档区块接口(单向流)
+    rpc SingleArchiveBlocks(stream ArchiveBlockRequest) returns (SingleArchiveBlockResp) {} ;
+    
+    // 查询归档状态
+    rpc GetArchivedStatus(ArchiveStatusRequest) returns (ArchiveStatusResp) {} ;
+
+    // 获取当前归档中心存储信息
+    rpc GetStoreStatus(ArchiveStatusRequest) returns (StoreStatusResp) {} ;
+
+    // 查询高度范围内区块  
+    rpc GetRangeBlocks(RangeBlocksRequest) returns (stream common.BlockInfo) {} ;
+
+    // 根据blockhash查询区块 
+    rpc GetBlockByHash(BlockByHashRequest) returns (BlockWithRWSetResp) {};
+
+    // 根据块高查询区块  
+    rpc GetBlockByHeight(BlockByHeightRequest) returns (BlockWithRWSetResp) {};
+
+    // 根据txid查询区块  
+    rpc GetBlockByTxId(BlockByTxIdRequest) returns (BlockWithRWSetResp) {} ;
+
+    // 根据txid查询RWSET 
+    rpc GetTxRWSetByTxId(BlockByTxIdRequest) returns (TxRWSetResp) {} ; 
+
+    // 根据txid查询transaction  
+    rpc GetTxByTxId(BlockByTxIdRequest) returns (TransactionResp) {};
+
+    // 查询归档中心的最新的配置区块信息 
+    rpc GetLastConfigBlock(ArchiveStatusRequest) returns (BlockWithRWSetResp) {};
+
+    // 根据txid查询块高，或判定tx是否存在，或查询tx的confirmtime 
+    rpc GetTxDetailByTxId(TxDetailByIdRequest) returns (TxDetailByIdResp) {};
+    
+}
+
+enum OperationByHash {
+    OperationBlockExists = 0; // 1. 检查区块是否存在，如果存在返回块高度 
+    OperationGetBlockByHash = 1; // 2. 查询common.Block 
+    OperationGetHeightByHash = 2;// 3. 查询块高度，仅返回 
+}
+
+enum OperationByHeight {
+    OperationGetBlockByHeight = 0; // 查询common.Block 
+    OperationGetBlockHeaderByHeight = 1; // 仅仅查询common.BlockHeader 
+}
+
+enum OperationByTxId {
+    OperationGetTxHeight = 0; // 根据txid查询块高度
+    OperationTxExists = 1; // 根据txid判断tx是否存在
+    OperationGetTxConfirmedTime = 2; // 根据txid查询tx确认时间 
+}
+
+enum RegisterStatus {
+    RegisterStatusSuccess = 0 ; // 注册成功
+    RegisterStatusConflict = 1; // 注册失败,有同一条链其他节点正在注册,可以稍后重试
+}
+
+enum ArchiveStatus {
+    ArchiveStatusFailed = 0 ; // 归档区块失败
+    ArchiveStatusHasArchived = 1 ; // 区块正确,且已经在归档中心存在
+    ArchiveStatusSuccess = 2 ; // 传输区块正足额,且这个区块正确写入到了归档中心 
+}
+
+enum StoreDataType {
+    BlockData = 0; // 1. block file data
+    CompressedData = 1; // 2. compressed file data
+    DecompressData = 2;// 3. decompress file data
+}
+
+message RegisterResp {
+    RegisterStatus register_status = 1; 
+    uint32 code = 2; // code > 0 means error
+    string message = 3; // default "",else means error msg 
+}
+
+message ArchiveBlockRequest {
+    string chain_unique = 1;
+    common.BlockInfo block = 2;
+}
+
+message SingleArchiveBlockResp {
+    uint64 archived_begin_height = 1;
+    uint64 archived_end_height = 2;  
+    uint32 code = 3; // code > 0 means error
+    string message = 4; // default "",else means error msg 
+}
+
+message ArchiveBlockResp {
+    ArchiveStatus archive_status = 1;
+    uint32 code = 2; // code > 0 means error
+    string message = 3; // default "",else means error msg    
+}
+
+message ArchiveStatusRequest {
+    string chain_unique = 1;
+}
+
+message ArchiveStatusResp {
+    uint64 archived_height = 1;
+    bool in_archive = 2;
+    uint32 code = 3; // code > 0 means error
+    string message = 4; // default "",else means error msg 
+}
+
+message RangeBlocksRequest {
+    string chain_unique = 1;
+    uint64 start_height = 2;
+    uint64 end_height = 3; 
+}
+
+message BlockByHashRequest {
+    string chain_unique = 1;
+    string block_hash = 2;
+    OperationByHash operation = 3; 
+}
+
+message BlockByHeightRequest {
+    string chain_unique = 1;
+    uint64 height = 2;
+    OperationByHeight operation = 3; // 根据块高读查询信息
+}
+
+message BlockByTxIdRequest {
+    string chain_unique = 1;
+    string tx_id = 2;
+}
+
+message TxDetailByIdRequest {
+    string chain_unique = 1;
+    string tx_id = 2;
+    OperationByTxId operation = 3;    
+}
+
+message TxDetailByIdResp {
+    uint64 height = 1; // 区块高度
+    bool tx_exist = 2; // 区块是否存在
+    uint64 tx_confirmedTime = 3; // tx确认时间 
+    uint32 code = 4; // code > 0 means error
+    string message = 5; // default "",else means error msg 
+}
+
+message BlockWithRWSetResp {
+    common.BlockInfo block_data = 1; // 区块数据
+    uint32 code = 2; // code > 0 means error
+    string message = 3; // default "",else means error msg     
+}
+
+message TxRWSetResp {
+    common.TxRWSet rw_set = 1; // 读写集数据
+    uint32 code = 2; // code > 0 means error
+    string message = 3; // default "",else means error msg        
+}
+
+message TransactionResp {
+    common.Transaction transaction = 1; //交易
+    uint32 code = 2; // code > 0 means error
+    string message = 3; // default "",else means error msg       
+}
+
+message StoreStatusResp {
+    StoreStatus store_status = 1;
+    uint32 code = 2; // code > 0 means error
+    string message = 3; // default "",else means error msg
+}
+
+message StoreStatus {
+    string chain_unique = 1;
+    repeated StoreInfo StoreInfos = 2;
+    int64 size = 3;
+}
+
+message StoreInfo {
+    StoreDataType type = 1;
+    repeated FileInfo FileInfos = 2;
+    int64 size = 3;
+}
+
+message FileInfo {
+    string name = 1;
+    uint64 start = 2;
+    uint64 end = 3;
+    int64 size = 4;
+}

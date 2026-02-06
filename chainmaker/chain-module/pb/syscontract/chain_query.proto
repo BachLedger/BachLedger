@@ -1,0 +1,73 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of chain query contract
+enum ChainQueryFunction {
+    // get block by transactionId
+    GET_BLOCK_BY_TX_ID = 0;
+
+    // get transaction by transactionId
+    GET_TX_BY_TX_ID = 1;
+
+    // get block by block height
+    GET_BLOCK_BY_HEIGHT = 2;
+
+    // get chain information, include current height and consensus node list
+    GET_CHAIN_INFO = 3;
+
+    // get the last configuration block
+    GET_LAST_CONFIG_BLOCK = 4;
+
+    // get block by block hash
+    GET_BLOCK_BY_HASH = 5;
+
+    // get the list of chains the node knows
+    GET_NODE_CHAIN_LIST = 6;
+
+    // get governance information
+    GET_GOVERNANCE_CONTRACT = 7;
+
+    // get read/write set information by eight
+    GET_BLOCK_WITH_TXRWSETS_BY_HEIGHT = 8;
+
+    // get read/write set information by hash
+    GET_BLOCK_WITH_TXRWSETS_BY_HASH = 9;
+
+    // get the last block
+    GET_LAST_BLOCK = 10;
+
+    // get full block by height
+    GET_FULL_BLOCK_BY_HEIGHT = 11;
+
+    // get block height by tx id
+    GET_BLOCK_HEIGHT_BY_TX_ID = 12;
+
+    // get block height by hash
+    GET_BLOCK_HEIGHT_BY_HASH = 13;
+
+    //get block header by height
+    GET_BLOCK_HEADER_BY_HEIGHT = 14;
+
+    // get archived block height
+    GET_ARCHIVED_BLOCK_HEIGHT = 15;
+
+    //get all contract info list
+    GET_ALL_CONTRACTS = 16;
+
+    // get merkle path by tx id
+    GET_MERKLE_PATH_BY_TX_ID = 17;
+
+    // get archive status
+    GET_ARCHIVE_STATUS = 18;
+}

@@ -1,0 +1,50 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of subscribe
+enum SubscribeFunction {
+    SUBSCRIBE_BLOCK = 0;
+    SUBSCRIBE_TX = 1;
+    SUBSCRIBE_CONTRACT_EVENT = 2;
+}
+
+// subscribe block payload parameters
+message SubscribeBlock {
+    enum Parameter {
+        START_BLOCK = 0;
+        END_BLOCK = 1;
+        WITH_RWSET = 2;
+        ONLY_HEADER = 3;
+    }
+}
+
+// subscribe transaction payload parameters
+message SubscribeTx {
+    enum Parameter {
+        START_BLOCK = 0;
+        END_BLOCK = 1;
+        CONTRACT_NAME = 2;
+        TX_IDS = 3;
+    }
+}
+
+// subscribe contract event parameters
+message SubscribeContractEvent{
+    enum Parameter {
+        TOPIC = 0;
+        CONTRACT_NAME = 1;
+        START_BLOCK = 2;
+        END_BLOCK = 3;
+    }
+}

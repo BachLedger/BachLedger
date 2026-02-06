@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  node1:
+    container_name: node1
+    image: "chainmaker"
+    working_dir: "/yzchain-go/bin"
+    command: "./yzchain -c ../config/yz-org1/yzchain.yml start"
+    ports:
+      - "7988:7988"
+      - "17989:17989"
+      - "4321:4321"
+    volumes:
+      - ./yz-org1:/yzchain-go/config/yz-org1
+      - ../../../../../config/yz-org1/certs:/yzchain-go/config/yz-org1/certs
+      - ../../../../../config/yz-org2/certs:/yzchain-go/config/yz-org2/certs
+      - ../../../../../config/yz-org3/certs:/yzchain-go/config/yz-org3/certs
+      - ../../../../../config/yz-org4/certs:/yzchain-go/config/yz-org4/certs
+    networks:
+      localnet:
+        ipv4_address: 192.168.2.2
+
+networks:
+  localnet:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        -
+          subnet: 192.168.2.0/16

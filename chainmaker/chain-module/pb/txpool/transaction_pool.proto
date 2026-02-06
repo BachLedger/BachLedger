@@ -1,0 +1,223 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.txpool";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/txpool";
+
+package txpool;
+
+import "common/transaction.proto";
+import "common/request.proto";
+
+// TxPoolSignal is used by tx pool to send signal to block proposer
+message TxPoolSignal {
+    // transaction event type
+    SignalType signal_type = 1;
+
+    // chainId
+    string chain_id = 2;
+}
+
+// SignalType is a transaction event type
+enum SignalType {
+    // no transaction
+    NO_EVENT = 0;
+
+    // new transaction
+    TRANSACTION_INCOME = 1;
+
+    // packing block
+    BLOCK_PROPOSE = 2;
+}
+
+// TxType is the transaction type
+enum TxType {
+  // unknown
+  UNKNOWN_TYPE = 0;
+
+  // config transaction
+  CONFIG_TX = 1;
+
+  // common transaction
+  COMMON_TX = 2;
+
+  // config and common transaction
+  ALL_TYPE  = 3;
+}
+
+// TxStage is the current transaction stage
+enum TxStage {
+  // unknown
+  UNKNOWN_STAGE = 0;
+
+  //  in queue
+  IN_QUEUE = 1;
+
+  // in pending
+  IN_PENDING = 2;
+
+  // in queue and in pending
+  ALL_STAGE  = 3;
+}
+
+// TxPoolStatus defines txPool status
+message TxPoolStatus {
+  // the max size of config tx pool
+  int32 config_tx_pool_size = 1;
+
+  // the max size of common tx pool
+  int32 common_tx_pool_size = 2;
+
+  // the num of config tx in queue cache
+  int32 config_tx_num_in_queue = 3;
+
+  // the num of config tx in pending cache
+  int32 config_tx_num_in_pending = 4;
+
+  // the num of common tx in queue cache
+  int32 common_tx_num_in_queue = 5;
+
+  // the num of common tx in pending cache
+  int32 common_tx_num_in_pending = 6;
+}
+
+// TxPoolMsg contains all txPool msg type and msg body
+message TxPoolMsg {
+  // txPool message type
+  TxPoolMsgType type = 1;
+
+  // message bytes
+  bytes payload = 2;
+}
+
+// TxPoolMsgType defines different type message in txPool
+enum TxPoolMsgType {
+  // single transaction type
+  SINGLE_TX = 0;
+
+  // batch transaction type
+  BATCH_TX = 1;
+
+  // transaction recover request type
+  RECOVER_REQ = 2;
+
+  // transaction recover response type
+  RECOVER_RESP = 3;
+}
+
+// transaction batch, used to add transaction efficiently in normal and batch txPool
+message TxBatch {
+    // batch id = timestamp(8byte)+nodeId(8byte)+batchHash(8byte)
+    string batch_id = 1;
+
+    // batch transactions are broadcast by the node
+//    string node_id = 2;
+
+    // batch size
+    int32 size = 3;
+
+    // transaction list
+    repeated common.Transaction txs = 4;
+
+    // Map: transaction ID mapping record( key: transaction ID, value: transaction index in txs)
+    map<string, int32> tx_ids_map = 5;
+
+    // batch signature
+    common.EndorsementEntry endorsement = 6;
+}
+
+// transaction recover request, used to request transactions from proposer
+message TxRecoverRequest {
+  // node id
+  string node_id = 1;
+
+  // height
+  uint64 height = 2;
+
+  // txId list
+  repeated string tx_ids = 3;
+}
+
+// transaction recover response, used to return transactions to the validators by proposer
+message TxRecoverResponse {
+  // node id
+  string node_id = 1;
+
+  // height
+  uint64 height = 2;
+
+  // tx list
+  repeated common.Transaction txs = 3;
+}
+
+// batch recover request, used to request batch from proposer
+message TxBatchRecoverRequest {
+  // proposer node id
+  string node_id = 1;
+
+  // height
+  uint64 height = 2;
+
+  // batchId list
+  repeated string batch_ids = 3;
+}
+
+// batch recover response, used to return transactions to the validators by proposer
+message TxBatchRecoverResponse {
+  // node id
+  string node_id = 1;
+
+  // height
+  uint64 height = 2;
+
+  // batch list
+  repeated TxBatch tx_batches = 3;
+}
+
+// rpc get pool status request
+message GetPoolStatusRequest {
+  // blockchain identifier
+  string chain_id = 1;
+}
+
+// rpc get tx ids by type and stage request
+message GetTxIdsByTypeAndStageRequest {
+  // blockchain identifier
+  string chain_id = 1;
+
+  // tx type
+  TxType tx_type = 2;
+
+  // tx stage
+  TxStage tx_stage = 3;
+}
+
+// rpc get tx ids by type and stage response
+message GetTxIdsByTypeAndStageResponse {
+  // tx id list
+  repeated string tx_ids = 1;
+}
+
+// rpc get txs in pool by tx ids request
+message GetTxsInPoolByTxIdsRequest {
+  // blockchain identifier
+  string chain_id = 1;
+
+  // tx id list
+  repeated string tx_ids = 2;
+}
+
+// rpc get txs in pool by tx ids response
+message GetTxsInPoolByTxIdsResponse {
+  // txs in the tx pool
+  repeated common.Transaction txs = 1;
+
+  // tx ids of txs that are not in the tx pool
+  repeated string tx_ids = 2;
+}

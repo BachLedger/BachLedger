@@ -1,0 +1,144 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.store";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/store";
+
+package store;
+import "common/block.proto";
+import "common/rwset.proto";
+import "common/result.proto";
+import "common/transaction.proto";
+enum DbType {
+  INVALID_DB = 0;
+  BLOCK_DB = 1;
+  BLOCK_INDEX_DB = 2;
+  TX_DB = 3;
+  TX_INDEX_DB = 4;
+  SOFT_DB = 5;
+  STATE_DB = 6;
+  READ_WRITE_DB = 7;
+}
+
+// block structure used in serialization
+message SerializedBlock {
+  // header of block
+  common.BlockHeader header = 1;
+
+  // transaction execution sequence of the block, described by DAG
+  common.DAG dag = 2;
+
+  // transaction id list within the block
+  repeated string tx_ids = 3;
+
+  // block additional data, not included in block hash calculation
+  common.AdditionalData additional_data = 4;
+}
+
+// Block and its read/write set information
+message BlockWithRWSet {
+  // block data
+  common.Block block = 1;
+
+  // transaction read/write set of blocks
+  repeated common.TxRWSet txRWSets = 2;
+
+  // contract event info
+  repeated common.ContractEvent contract_events = 3;
+
+}
+
+// transaction info include transaction and its block height hash and tx index
+message TransactionStoreInfo {
+  // transaction raw data
+  common.Transaction transaction = 1;
+
+  // block height
+  uint64 block_height = 2;
+
+  // Deprecated, block hash
+  bytes block_hash = 3;
+
+  // transaction index in block
+  uint32 tx_index = 4;
+
+  // block header timestamp
+  int64 block_timestamp =5;
+
+  // transaction offset index in file
+  StoreInfo transaction_store_info =6;
+}
+
+enum DataStoreType {
+  // 文件系统存储
+  FILE_STORE = 0;
+  //SQL数据库存储
+  SQL_STORE=1;
+  //云对象存储
+  COS=2;
+}
+// store data information
+message StoreInfo {
+  //store type
+  DataStoreType store_type =1;
+  // file name
+  string file_name = 2;
+
+  // offset in file
+  uint64 offset = 3;
+
+  // data length
+  uint64 byte_len = 4;
+}
+
+// store type
+enum StoreType {
+  RawDB = 0;
+  BFDB = 1;
+}
+
+// archive in process status
+enum ArchiveProcess {
+  // chain is normal status
+  Normal = 0;
+  // chain is doing archive
+  Archiving = 1;
+  // chain is doing restore
+  Restoring = 2;
+}
+
+// xxx.fdb information
+message FileRange {
+  // file name: 00000000000000000019.xxx
+ string file_name =1;
+
+ // file contains block start height
+ uint64 Start = 2;
+
+  // file contains block end height
+ uint64 End = 3;
+}
+
+// archive status data
+message ArchiveStatus {
+  // store type
+  StoreType type =1;
+
+  // file range data
+  repeated FileRange file_ranges=2;
+
+  // current archive pivot height
+  uint64 archive_pivot =3;
+
+  // max allow archive height
+  uint64 max_allow_archive_height=4;
+
+  // node archive process status
+  ArchiveProcess process =5;
+}

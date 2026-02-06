@@ -1,0 +1,15 @@
+# IDE
+.idea
+.vscode
+.DS_Store
+cover.out
+
+# tmp
+*.log
+*.bak
+
+/data
+shardingbirdsnest/data
+birdsnest/data
+shardingbirdsnest/test/data
+shardingbirdsnest/test/*.html

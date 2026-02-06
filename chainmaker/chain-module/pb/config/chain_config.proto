@@ -1,0 +1,253 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.config";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/config";
+package config;
+
+import "consensus/consensus.proto";
+import "accesscontrol/policy.proto";
+// a string k-v pair for config
+message ConfigKeyValue {
+  string key = 1;
+  string value = 2;
+}
+// ChainConfig
+message ChainConfig {
+  // blockchain identifier
+  string                          chain_id = 1;
+
+  // blockchain version
+  string                          version = 2;
+
+  // member type
+  string                          auth_type = 3;
+
+  // config sequence
+  uint64                          sequence = 4;
+
+  // encryption algorithm related configuration
+  CryptoConfig                    crypto = 5;
+
+  // block related configuration
+  BlockConfig                     block = 6;
+
+  // core module related configuration
+  CoreConfig                      core = 7;
+
+  // consensus related configuration
+  ConsensusConfig                 consensus = 8;
+
+  // trusted root related configuration
+  // for alliance members, the initial member's root info of the consortium; for public chain, there is no need to configure
+  // Key: node_id; value: address, node public key / CA certificate
+  repeated TrustRootConfig        trust_roots = 9;
+
+  repeated TrustMemberConfig      trust_members = 10;
+
+  // permission related configuration
+  repeated ResourcePolicy         resource_policies = 11;
+
+  ContractConfig contract = 12;
+
+  // snapshot module related configuration
+  SnapshotConfig snapshot = 13;
+
+  // scheduler module related configuration
+  SchedulerConfig                 scheduler = 14;
+
+  // tx sim context module related configuration
+  ContextConfig context = 15;
+
+  // disabled native contracts list for permission control purposes
+  repeated string disabled_native_contract = 16;
+
+  // gas account config
+  GasAccountConfig       account_config = 18;
+
+  // vm config
+  Vm vm = 17;
+}
+
+// specific permission configuration structure
+message ResourcePolicy {
+  // resource name
+  string          resource_name = 1;
+
+  // policy(permission)
+  accesscontrol.Policy          policy = 2;
+}
+
+// encryption configuration
+message CryptoConfig {
+  // enable Transaction timestamp verification or Not
+  string hash = 1;
+}
+
+// blockConfig
+message BlockConfig {
+  // enable transaction timestamp verification or Not
+  bool   tx_timestamp_verify = 1;
+
+  // expiration time of transaction timestamp (seconds)
+  uint32 tx_timeout = 2;
+
+  // maximum number of transactions in a block
+  uint32 block_tx_capacity = 3;
+
+  // maximum block size, in MB
+  uint32 block_size = 4;
+
+  // block proposing interval, in ms
+  uint32 block_interval = 5;
+
+  // maximum size of transaction's parameter, in MB
+  uint32 tx_parameter_size = 6;
+}
+
+// Scheduler configuration
+message SchedulerConfig {
+  // for evidence contract
+  bool enable_evidence = 1;
+}
+
+// gas account config
+message GasAccountConfig {
+  // for admin address
+  string gas_admin_address = 1;
+
+  // for admin gas count
+  uint32 gas_count = 2;
+
+  // for gas manager
+  bool  enable_gas = 3;
+
+  // default gas value for invoke user contract
+  uint64 default_gas = 4;
+  // default gas price per `byte` for invoke user contract
+  float default_gas_price = 5;
+  // default gas value for install/upgrade user contract
+  uint64 install_base_gas = 6;
+  // default gas price per `byte` for install/upgrade user contract
+  float install_gas_price = 7;
+
+}
+
+// Snapshot configuration
+message SnapshotConfig {
+  // for the evidence contract
+  bool enable_evidence = 1;
+}
+
+// TxSimContext configuration
+message ContextConfig {
+  // for the evidence contract
+  bool enable_evidence = 1;
+}
+
+// consensus message turbo configuration
+message ConsensusTurboConfig {
+  // switch of consensus message turbo
+  bool consensus_message_turbo = 1;
+
+  // retry time of get tx by txIds from txpool
+  uint64 retry_time = 2;
+
+  // the interval of retry get tx by txIds from txpool(ms)
+  uint64 retry_interval = 3;
+}
+
+// core module related configuration
+message CoreConfig {
+  // [0, 60], the time when the transaction scheduler gets the transaction from the transaction pool to schedule
+  uint64 tx_scheduler_timeout = 1;
+
+  // [0, 60], the time-out for verification after the transaction scheduler obtains the transaction from the block
+  uint64 tx_scheduler_validate_timeout = 2;
+
+  // the configuration of consensus message turbo
+  ConsensusTurboConfig consensus_turbo_config = 3;
+
+  // enable sender group, used for handling txs with sender conflicts efficiently
+  bool enable_sender_group = 4;
+
+  // enable conflicts bit window, used for dynamic tuning the capacity of tx execution goroutine pool
+  bool enable_conflicts_bit_window = 5;
+
+  // enable optimize charge gas for the same account transactions
+  bool enable_optimize_charge_gas = 6;
+}
+
+// consensus module related configuration
+message ConsensusConfig {
+  // consensus type
+  consensus.ConsensusType           type = 1;
+
+  // organization list of nodes
+  repeated OrgConfig      nodes = 2;
+
+  // expand the field, record the difficulty, reward and other consensus algorithm configuration
+  repeated ConfigKeyValue   ext_config = 3;
+
+}
+
+// organization related configuration
+message OrgConfig {
+  // organization identifier
+  string org_id = 1;
+
+  // address list owned by the organization
+  // Deprecated , replace by node_id
+  repeated string address = 2;
+
+  // node id list owned by the organization
+  repeated string node_id = 3;
+}
+
+// trusted root related configuration
+message TrustRootConfig {
+  // oranization ideftifier
+  string org_id = 1;
+
+  // root certificate / public key
+  repeated string root = 2;
+}
+
+message ContractConfig {
+  bool enable_sql_support = 1;
+  // disabled native contracts list for permission control purposes
+  repeated string disabled_native_contract = 2;
+
+  // If it is true, Only creators are allowed to upgrade contract.
+  bool only_creator_can_upgrade = 3;
+}
+
+message TrustMemberConfig {
+  // member info
+  string member_info = 1;
+
+  // oranization ideftifier
+  string org_id = 2;
+
+  string role = 3;
+
+  string node_id = 4;
+
+}
+
+message Vm {
+  repeated string support_list = 1;
+  AddrType addr_type = 2;
+}
+
+enum AddrType {
+  CHAINMAKER = 0;
+  ZXL = 1;
+  ETHEREUM = 2;
+}

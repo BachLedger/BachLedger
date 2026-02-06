@@ -1,0 +1,126 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.syscontract";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/syscontract";
+
+package syscontract;
+
+// methods of DPoS stake contract
+enum DPoSStakeFunction {
+    // get all validator candidates
+    GET_ALL_CANDIDATES = 0;
+    // get validator by address
+    GET_VALIDATOR_BY_ADDRESS = 1;
+    // delegate
+    DELEGATE = 2;
+    // get delegate by address
+    GET_DELEGATIONS_BY_ADDRESS = 3;
+    // get user delegation by validator
+    GET_USER_DELEGATION_BY_VALIDATOR = 4;
+    // undelegate
+    UNDELEGATE = 5;
+    // read epoch by id
+    READ_EPOCH_BY_ID = 6;
+    // read latest epoch
+    READ_LATEST_EPOCH = 7;
+    // set node id before join network
+    SET_NODE_ID = 8;
+    // get node id after join network
+    GET_NODE_ID = 9;
+    // update min self delegation
+    UPDATE_MIN_SELF_DELEGATION = 10;
+    // read min self delegation
+    READ_MIN_SELF_DELEGATION = 11;
+    // update epoch validator number
+    UPDATE_EPOCH_VALIDATOR_NUMBER = 12;
+    // read epoch validator number
+    READ_EPOCH_VALIDATOR_NUMBER = 13;
+    // update epoch block number
+    UPDATE_EPOCH_BLOCK_NUMBER = 14;
+    // read epoch block number
+    READ_EPOCH_BLOCK_NUMBER = 15;
+    // read complete unbounding epoch number
+    READ_COMPLETE_UNBOUNDING_EPOCH_NUMBER = 16;
+    // read system contract address
+    READ_SYSTEM_CONTRACT_ADDR = 18;
+}
+
+message Epoch {
+    // ID with auto-increment
+    uint64  epoch_id = 1;
+    // A collection of validators for the current generation
+    repeated string proposer_vector = 2;
+    // Next epoch switch height
+    uint64 next_epoch_create_height = 3;
+}
+
+enum BondStatus{
+    BONDED = 0;
+    UNBONDING = 1;
+    UNBONDED = 2;
+}
+
+message Validator {
+    // The address of the verifier: base58.Encode(sha256(pubkey))
+    string validator_address = 1;
+    // active punishment tags whether validator is jailed or not
+    bool jailed = 2;
+    // validator status: Bonded / Unbonding / Unbonded
+    BondStatus status = 3;
+    // delegate token amount
+    string tokens = 4;
+    // delegate share amount
+    string delegator_shares = 5;
+    // undelegate entry epoch id
+    uint64 unbonding_epoch_id = 6;
+    // undelegate entry complete epoch id
+    uint64 unbonding_completion_epoch_id = 7;
+    // validator self delegate token amount
+    string self_delegation = 8;
+}
+
+message Delegation  {
+    // delegator cert hash
+    string delegator_address = 1;
+    // validator cert hash
+    string validator_address = 2;
+    // share amount
+    string shares = 3;
+}
+
+message UnbondingDelegation {
+    // epoch id
+    string epoch_id = 1;
+    // delegator cert hash
+    string delegator_address = 2;
+    // validator cert hash
+    string validator_address = 3;
+    // unbond entry records
+    repeated UnbondingDelegationEntry entries = 4;
+}
+
+message UnbondingDelegationEntry {
+    // create epoch id
+    uint64 creation_epoch_id = 1;
+    // complete epoch id
+    uint64 completion_epoch_id = 2;
+    // undelegate amount
+    string amount = 3;
+}
+
+message ValidatorVector {
+    // validator cert hash vector
+    repeated string vector = 1;
+}
+
+message DelegationInfo {
+    // delegate slice
+    repeated Delegation infos = 1;
+}

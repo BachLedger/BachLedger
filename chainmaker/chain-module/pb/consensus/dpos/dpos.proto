@@ -1,0 +1,21 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.dpos";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/consensus/dpos";
+
+package dpos;
+
+message CandidateInfo {
+  // Identification of the node
+  string peer_id = 1;
+
+  // The voting weight of the node
+  string weight = 2;
+}

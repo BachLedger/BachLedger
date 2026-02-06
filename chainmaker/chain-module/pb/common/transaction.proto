@@ -1,0 +1,78 @@
+/*
+Copyright (C) BABEC. All rights reserved.
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+option java_package = "org.chainmaker.pb.common";
+option java_outer_classname = "ChainmakerTransaction";
+option go_package = "chainmaker.org/chainmaker/pb-go/v2/common";
+
+package common;
+
+import "common/request.proto";
+import "common/result.proto";
+import "common/rwset.proto";
+
+// a transaction includes request and its result
+message Transaction {
+    // payload
+    Payload payload = 1;
+
+    // sender account and signature
+    EndorsementEntry sender = 2;
+
+    // endorser accounts and signatures
+    repeated EndorsementEntry endorsers = 3;
+
+    // result of the transaction
+    Result result = 4;
+
+    // payer account and signature
+    EndorsementEntry payer = 5;
+}
+
+// transaction info include transaction and its block height hash and tx index
+message TransactionInfo {
+    // transaction raw data
+    Transaction transaction = 1;
+
+    // block height
+    uint64 block_height = 2;
+
+    // Deprecated, block hash
+    bytes block_hash = 3;
+
+    // transaction index in block
+    uint32 tx_index = 4;
+
+    // block header timestamp
+    int64 block_timestamp =5;
+}
+//transaction and read write set
+message TransactionWithRWSet {
+    // transaction raw data
+    Transaction transaction = 1;
+    TxRWSet rw_set = 2;
+}
+message TransactionInfoWithRWSet {
+    // transaction raw data
+    Transaction transaction = 1;
+
+    // block height
+    uint64 block_height = 2;
+
+    // Deprecated, block hash
+    bytes block_hash = 3;
+
+    // transaction index in block
+    uint32 tx_index = 4;
+
+    // block header timestamp
+    int64 block_timestamp =5;
+
+    TxRWSet rw_set = 6;
+}
