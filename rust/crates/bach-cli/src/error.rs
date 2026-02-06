@@ -40,4 +40,8 @@ pub enum CliError {
     /// Config error
     #[error("Config error: {0}")]
     Config(String),
+
+    /// Cryptographic error
+    #[error("Crypto error: {0}")]
+    Crypto(String),
 }

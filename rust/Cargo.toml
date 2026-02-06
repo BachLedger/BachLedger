@@ -86,6 +86,9 @@ dashmap = "5"
 proptest = "1"
 criterion = "0.5"
 
+# HTTP 客户端
+reqwest = { version = "0.11", features = ["json"] }
+
 [profile.release]
 opt-level = 3
 lto = "thin"
@@ -93,3 +96,30 @@ lto = "thin"
 [profile.bench]
 opt-level = 3
 debug = true
+
+# 根 crate 用于示例
+[package]
+name = "bachledger-examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+bach-primitives = { path = "crates/bach-primitives" }
+bach-crypto = { path = "crates/bach-crypto" }
+bach-types = { path = "crates/bach-types" }
+bach-rlp = { path = "crates/bach-rlp" }
+k256 = { version = "0.13", features = ["ecdsa", "ecdsa-core"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+
+[[example]]
+name = "manual_test"
+path = "examples/manual_test.rs"
+
+[[example]]
+name = "asset_token_test"
+path = "examples/asset_token_test.rs"
