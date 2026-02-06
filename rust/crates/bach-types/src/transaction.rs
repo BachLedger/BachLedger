@@ -176,6 +176,35 @@ impl SignedTransaction {
         self.to().is_none()
     }
 
+    /// Get transaction type
+    pub fn tx_type(&self) -> TxType {
+        self.tx_type
+    }
+
+    /// Get gas price (for legacy transactions)
+    pub fn gas_price(&self) -> Option<u128> {
+        match &self.tx {
+            TransactionBody::Legacy(tx) => Some(tx.gas_price),
+            TransactionBody::DynamicFee(_) => None,
+        }
+    }
+
+    /// Get max fee per gas (for EIP-1559 transactions)
+    pub fn max_fee_per_gas(&self) -> Option<u128> {
+        match &self.tx {
+            TransactionBody::Legacy(_) => None,
+            TransactionBody::DynamicFee(tx) => Some(tx.max_fee_per_gas),
+        }
+    }
+
+    /// Get max priority fee per gas (for EIP-1559 transactions)
+    pub fn max_priority_fee_per_gas(&self) -> Option<u128> {
+        match &self.tx {
+            TransactionBody::Legacy(_) => None,
+            TransactionBody::DynamicFee(tx) => Some(tx.max_priority_fee_per_gas),
+        }
+    }
+
     /// Get effective gas price for the given base fee
     ///
     /// Returns `None` if `base_fee > max_fee_per_gas` for EIP-1559 transactions

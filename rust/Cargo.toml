@@ -14,6 +14,7 @@ members = [
     "crates/bach-txpool",
     "crates/bach-metrics",
     "crates/bach-core",
+    "crates/bach-rpc",
     "crates/bach-node",
     "crates/bach-e2e",
     "crates/bach-sdk",
@@ -44,6 +45,7 @@ bach-metrics = { path = "crates/bach-metrics" }
 bach-core = { path = "crates/bach-core" }
 bach-e2e = { path = "crates/bach-e2e" }
 bach-sdk = { path = "crates/bach-sdk" }
+bach-rpc = { path = "crates/bach-rpc" }
 bach-cli = { path = "crates/bach-cli" }
 
 # 密码学
