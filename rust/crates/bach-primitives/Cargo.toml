@@ -1,0 +1,19 @@
+[package]
+name = "bach-primitives"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Primitive types for BachLedger"
+
+[dependencies]
+primitive-types.workspace = true
+hex.workspace = true
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+rlp = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "primitive-types/serde"]
+rlp = ["dep:rlp", "primitive-types/rlp"]

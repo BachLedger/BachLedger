@@ -134,6 +134,49 @@ impl From<[u8; 20]> for H160 {
     }
 }
 
+// RLP implementations (behind feature flag)
+#[cfg(feature = "rlp")]
+mod rlp_impl {
+    use super::*;
+    use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
+
+    impl Encodable for H256 {
+        fn rlp_append(&self, s: &mut RlpStream) {
+            s.encoder().encode_value(&self.0);
+        }
+    }
+
+    impl Decodable for H256 {
+        fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+            let bytes: Vec<u8> = rlp.as_val()?;
+            if bytes.len() != 32 {
+                return Err(DecoderError::RlpInvalidLength);
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            Ok(H256(arr))
+        }
+    }
+
+    impl Encodable for H160 {
+        fn rlp_append(&self, s: &mut RlpStream) {
+            s.encoder().encode_value(&self.0);
+        }
+    }
+
+    impl Decodable for H160 {
+        fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+            let bytes: Vec<u8> = rlp.as_val()?;
+            if bytes.len() != 20 {
+                return Err(DecoderError::RlpInvalidLength);
+            }
+            let mut arr = [0u8; 20];
+            arr.copy_from_slice(&bytes);
+            Ok(H160(arr))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
