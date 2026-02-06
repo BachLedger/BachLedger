@@ -1,0 +1,109 @@
+{
+  "stories": [
+    {
+      "title": "ECDSA Sign-Verify-Recover Flow",
+      "tags": ["call-chain", "crypto", "signature"],
+      "content": "A transaction is signed using sign(message_hash, private_key) which: (1) calls k256's sign_prehash_recoverable to get raw signature and recovery_id, (2) extracts r and s components as 32-byte arrays, (3) normalizes s to low-s form per EIP-2 by checking if s > n/2 and if so computing s' = n - s and flipping recovery_id, (4) returns Signature with v = recovery_id + 27 for Ethereum compatibility. Verification via verify() first rejects high-s signatures, then reconstructs k256 signature and calls verify_prehash. Recovery via recover_public_key() uses the v value to determine which of two possible public keys is correct, enabling sender address derivation without including the full public key in transactions."
+    },
+    {
+      "title": "Ethereum Address Derivation",
+      "tags": ["call-chain", "crypto", "address"],
+      "content": "To derive an Ethereum address from a public key: public_key_to_address() gets the uncompressed public key (65 bytes starting with 0x04), strips the 0x04 prefix leaving 64 bytes (x || y coordinates), computes keccak256 of these 64 bytes, and takes the last 20 bytes as the address. This matches Ethereum's address derivation exactly, ensuring compatibility with existing Ethereum tooling and contracts."
+    },
+    {
+      "title": "RLP Encoding Rules",
+      "tags": ["encoding", "rlp", "ethereum"],
+      "content": "RLP (Recursive Length Prefix) encoding follows these rules: (1) Single byte in range [0x00, 0x7f] encodes as itself, (2) Short string (0-55 bytes): prefix 0x80 + length, then data, (3) Long string (>55 bytes): prefix 0xb7 + length_of_length, then length bytes, then data, (4) Short list (0-55 bytes total payload): prefix 0xc0 + payload_length, then concatenated encoded items, (5) Long list (>55 bytes payload): prefix 0xf7 + length_of_length, then length bytes, then items. Special cases: empty string = 0x80, empty list = 0xc0, integer 0 = 0x80. Integers encode with minimal bytes (no leading zeros). H256 (32 bytes) encodes with prefix 0xa0, Address/H160 (20 bytes) with prefix 0x94."
+    },
+    {
+      "title": "EVM Bytecode Execution Flow",
+      "tags": ["call-chain", "evm", "execution"],
+      "content": "EVM bytecode execution follows this flow: (1) Interpreter::new() analyzes bytecode for valid JUMPDESTs by scanning sequentially and skipping PUSH operands, (2) run() loops calling step() until stopped flag is set or PC exceeds code length, (3) step() fetches opcode at PC, charges static gas via gas::static_gas(), then dispatches to execute(), (4) execute() implements each opcode: arithmetic ops modify stack, memory ops may trigger expansion (with additional gas), control flow ops (JUMP/JUMPI) validate destination is in jump_dests set, environment ops read from Environment context, (5) RETURN/STOP set stopped=true and populate return_data, REVERT returns Err(Revert(data)), other errors consume all gas. ExecutionResult captures success/gas_used/output/logs."
+    },
+    {
+      "title": "EVM Memory Expansion Gas Calculation",
+      "tags": ["gas", "evm", "memory"],
+      "content": "Memory expansion gas is calculated as: memory_cost = 3 * words + words^2 / 512, where words = ceil(size / 32). When memory needs to grow from current_size to new_size, gas charged is memory_cost(new_size) - memory_cost(current_size). Memory always expands to 32-byte word boundaries. The quadratic component prevents excessive memory allocation. Expansion is triggered by MLOAD/MSTORE/MSTORE8/CALLDATACOPY/CODECOPY/RETURNDATACOPY/KECCAK256/LOG/RETURN/REVERT when accessing beyond current size."
+    },
+    {
+      "title": "EVM Gas Cost Categories",
+      "tags": ["gas", "evm", "opcodes"],
+      "content": "EVM gas costs are categorized as: ZERO (0): STOP, RETURN, REVERT; BASE (2): ADDRESS, ORIGIN, CALLER, CALLVALUE, etc; VERYLOW (3): ADD, SUB, LT, GT, EQ, ISZERO, AND, OR, XOR, NOT, PUSH, DUP, SWAP, POP; LOW (5): MUL, DIV, MOD; MID (8): ADDMOD, MULMOD, JUMP; HIGH (10): JUMPI. Dynamic costs add to base: KECCAK256 = 30 + 6*words, EXP = 10 + 50*byte_size, memory expansion, copy operations (3 per word). EIP-2929 introduced cold (first access: 2100-2600) vs warm (subsequent: 100) costs for storage and external account access."
+    },
+    {
+      "title": "EIP-1559 Effective Gas Price Calculation",
+      "tags": ["gas", "transaction", "eip-1559"],
+      "content": "EIP-1559 transactions specify max_fee_per_gas and max_priority_fee_per_gas instead of a fixed gas_price. The effective gas price paid by the user is calculated as: (1) If base_fee > max_fee_per_gas, transaction cannot be included (returns None), (2) Otherwise, priority_fee = min(max_priority_fee_per_gas, max_fee_per_gas - base_fee), (3) effective_price = base_fee + priority_fee. The base_fee goes to the protocol (burned in Ethereum), while priority_fee goes to the block producer. Legacy transactions always pay their fixed gas_price regardless of base_fee. This mechanism makes gas prices more predictable and creates a deflationary pressure on ETH."
+    },
+    {
+      "title": "Bloom Filter for Log Search",
+      "tags": ["bloom", "logs", "ethereum"],
+      "content": "Bloom filters (2048 bits = 256 bytes) enable efficient log searching without scanning all logs. For each piece of data (address, topic): (1) compute keccak256 hash, (2) extract 3 bit positions using first 6 bytes of hash: bit_index = (hash[i*2] << 8 | hash[i*2+1]) & 0x7FF for i in 0..3, (3) set those bits in the filter. To check if bloom might contain data, verify all 3 bits are set. False positives are possible but false negatives are not. Block-level bloom aggregates all log blooms via OR. This allows clients to quickly filter blocks that definitely don't contain events of interest."
+    },
+    {
+      "title": "Seamless Scheduling Algorithm",
+      "tags": ["call-chain", "scheduler", "parallel-execution", "novel"],
+      "content": "BachLedger's Seamless Scheduling algorithm enables deterministic parallel transaction execution through five phases: (1) Pre-execution Analysis: For each transaction, predict or collect the RWSet (read/write sets) identifying which state keys (address+slot) will be accessed. (2) Dependency Graph Construction: Build a DAG by comparing all transaction pairs - if tx_j reads/writes a key that tx_i writes (where i<j), add edge i->j. Dependency types: RAW (read-after-write), WAW (write-after-write), WAR (write-after-read). (3) Batch Generation: Decompose DAG into topological levels using Kahn's algorithm. Transactions in the same level have no inter-dependencies and can execute in parallel. (4) Parallel Execution: Execute each batch using thread pool. OwnershipTable prevents runtime conflicts using DashMap - transactions must acquire ownership of write keys before execution. (5) Validation: Verify actual RW sets match predicted sets; retry transactions with mismatches up to max_retries limit."
+    },
+    {
+      "title": "Transaction Dependency Analysis",
+      "tags": ["scheduler", "conflict-detection"],
+      "content": "Dependency detection analyzes RWSets between transaction pairs. Three conflict types: (1) RAW (Read-After-Write): tx_j reads key K that tx_i writes -> tx_j must wait for tx_i. Detected via tx_j.reads.intersection(tx_i.writes). (2) WAW (Write-After-Write): both tx_i and tx_j write key K -> must serialize to preserve final state. Detected via tx_i.writes.intersection(tx_j.writes). (3) WAR (Write-After-Read): tx_j writes key K that tx_i reads -> tx_j must wait for tx_i's read to complete. Detected via tx_j.writes.intersection(tx_i.reads). For n transactions, O(n²) pair comparisons. Result is DAG where edges represent 'must execute before' relationships."
+    },
+    {
+      "title": "Ownership Table Runtime Conflict Prevention",
+      "tags": ["scheduler", "concurrency"],
+      "content": "OwnershipTable provides runtime write conflict prevention using DashMap for lock-free concurrent access. When a transaction starts execution, it calls acquire_ownership() for all keys in its write set. try_acquire(key, tx_id) atomically either: (1) acquires ownership if key is unowned and returns Ok(()), (2) returns Ok(()) if already owned by same tx (idempotent), (3) returns Err(current_owner) if owned by different tx. On conflict, the requesting transaction must wait or retry. On completion (success or failure), release_all(tx_id) frees all owned keys. This mechanism ensures that even if RWSet prediction is imperfect, actual concurrent writes to the same key are impossible."
+    },
+    {
+      "title": "Parallel Batch Generation via Topological Decomposition",
+      "tags": ["scheduler", "algorithm"],
+      "content": "generate_batches() decomposes the dependency DAG into parallel execution levels: (1) Initialize: remaining = all transactions, completed = empty. (2) Find ready transactions whose dependencies are all in completed set (in_degree effectively 0). (3) If no ready transactions but remaining non-empty, a cycle exists -> return CircularDependency error. (4) Add ready transactions as new batch, move from remaining to completed. (5) Repeat until remaining is empty. Result: Vec<Vec<TxId>> where each inner Vec is a batch executable in parallel. Optimal parallelism when many independent transactions; degrades to serial when all transactions conflict. ScheduleResult includes parallelism_ratio = total_txs / num_batches as efficiency metric."
+    },
+    {
+      "title": "Transaction Execution Flow in BlockExecutor",
+      "tags": ["call-chain", "execution", "core"],
+      "content": "BlockExecutor.execute_transaction() follows this flow: (1) Recover sender address from signature using recover_public_key + public_key_to_address. (2) Validate nonce matches account.nonce, return NonceMismatch error otherwise. (3) Calculate effective_gas_price using EIP-1559 rules (base_fee + priority_fee). (4) Calculate total_cost = gas_limit * effective_gas_price + value; check balance >= total_cost. (5) Deduct gas cost from sender, increment nonce. (6) Build EVM Environment with CallContext (caller, address, value, data, gas=limit-21000, is_static, depth), BlockContext (number, timestamp, coinbase, etc), TxContext (origin, gas_price). (7) Execute: contract creation (execute_create) or call (execute_call) using Interpreter. (8) Refund unused gas: (gas_limit - actual_gas_used) * effective_gas_price back to sender. (9) Transfer value to recipient (if success and not contract creation). (10) Pay miner: actual_gas_used * effective_gas_price to coinbase. (11) Build Receipt with status, cumulative_gas, gas_used, logs."
+    },
+    {
+      "title": "Contract Creation via CREATE",
+      "tags": ["execution", "evm", "contract"],
+      "content": "Contract creation in execute_create(): (1) Treat tx.data as init code (constructor bytecode). (2) Create Interpreter with init code and available gas. (3) Run interpreter - init code returns runtime bytecode via RETURN. (4) If success, calculate contract address using CREATE formula: keccak256(rlp([sender, nonce-1]))[12:] (last 20 bytes). (5) Store returned bytecode: compute code_hash = keccak256(bytecode), call state.set_code(code_hash, bytecode). (6) Create contract account with code_hash, store via set_account(contract_address, account). (7) Return gas_used, logs (from EVM), TxStatus::Success, and contract_address. On failure, return gas_used, empty logs, TxStatus::Failure, no contract address."
+    },
+    {
+      "title": "TBFT Consensus Round Flow",
+      "tags": ["call-chain", "consensus", "tbft"],
+      "content": "TBFT consensus progresses through steps for each round: (1) NewRound: Reset state, determine proposer via (height + round) % validator_count. (2) Propose: If we're proposer, create block and broadcast Proposal; otherwise wait for proposal or timeout. (3) Prevote: On receiving valid proposal, send Prevote for block_hash (or nil if locked on different block). Collect prevotes. (4) On 2/3+ prevotes for same block (polka): Lock on that block (locked_round, locked_block), move to Precommit, send Precommit for block. On 2/3+ nil prevotes or timeout: send Precommit nil. (5) Precommit: Collect precommits. On 2/3+ precommits for same block: Commit! Build Commit from precommit votes, store, broadcast Finalized message. On 2/3+ nil precommits or timeout: enter next round (round+1). Safety: locked_block ensures no conflicting commits. Liveness: valid_block enables progress after failures."
+    },
+    {
+      "title": "BFT Voting Thresholds",
+      "tags": ["consensus", "bft", "voting"],
+      "content": "TBFT uses Byzantine fault-tolerant voting thresholds: (1) Two-thirds majority (>2/3): Required for polka (prevote agreement) and commit (precommit agreement). Formula: power * 3 > total_power * 2. With 3 validators of equal power (100 each, total 300), need >200 power, so at least 201 (3 validators). (2) One-third threshold (≥1/3): Used for liveness checks. Formula: power * 3 >= total_power. With f Byzantine validators in 3f+1 total, honest 2f+1 nodes can always reach 2/3+. (3) Nil votes: Validators send nil prevote/precommit when: no valid proposal received, locked on different block, or timeout. 2/3+ nil votes trigger round advancement without committing. (4) Proposer rotation prevents single-point-of-failure: different proposer each round ensures liveness even if some proposers are Byzantine."
+    },
+    {
+      "title": "E2E Testing Pattern: Harness-Based Isolation",
+      "tags": ["testing", "e2e", "harness"],
+      "content": "BachLedger's e2e testing framework follows four principles: Simple (one command), Declarative (describe WHAT not HOW), Isolated (fresh state), Fast (tempdir). TestHarness::new() creates isolated test environment: (1) Creates tempdir for fresh RocksDB instance, (2) Initializes ExecutionState with empty state, (3) Sets default chain_id=1337, base_fee=1gwei, block_number=0. Each test calls create_account() to get TestAccount with random private key, fund_account() to set balance, then executes transactions. State persists within test but is completely isolated between tests. TestAccount::sign() wraps bach_crypto::sign() with EIP-155 chain_id handling. ReceiptAssertions trait provides fluent assert_success()/assert_failure() for readable test code."
+    },
+    {
+      "title": "E2E Test Contract Deployment Pattern",
+      "tags": ["testing", "e2e", "contracts"],
+      "content": "Pre-compiled bytecode in bach-e2e/contracts.rs enables testing without Solidity compiler. Pattern: Init Code + Runtime Code. Init code runs once during CREATE, copies runtime code to memory, returns it via RETURN. Example SimpleStorage: (1) Init code (SIMPLE_STORAGE_INIT_CODE) loads runtime code size, copies to memory at offset 0, returns it. (2) Runtime code (SIMPLE_STORAGE_RUNTIME) implements function dispatcher: CALLDATALOAD(0) gets first 4 bytes (selector), compares against known selectors (store=0x6057361d, retrieve=0x2e64cec1), jumps to handler. (3) store() handler: CALLDATALOAD(4) gets value, SSTORE(0, value). (4) retrieve() handler: SLOAD(0), returns via MSTORE+RETURN. Helper functions encode_store(value) and encode_retrieve() construct calldata for these functions."
+    },
+    {
+      "title": "Block Production in bach-node",
+      "tags": ["call-chain", "node", "block-production"],
+      "content": "Node::produce_block() implements the block production pipeline: (1) Collect pending transactions from txpool via get_pending(limit). (2) Build Block: create BlockHeader with parent_hash from latest block, incremented number, current timestamp, configured coinbase, gas_limit. Create BlockBody with collected transactions. (3) Execute via BlockExecutor::execute_block() which processes each transaction, updates state, generates receipts. (4) Store results: block_db.put_header(number, header_bytes), put_body(number, body_bytes), put_receipts(number, receipts). Update latest_block_number. (5) Update txpool: for each executed transaction, call txpool.set_nonce(sender, new_nonce) to remove included transactions and promote queued ones. This allows continuous block production as new transactions arrive."
+    },
+    {
+      "title": "Genesis Initialization",
+      "tags": ["node", "genesis", "initialization"],
+      "content": "Genesis block initialization in bach-node/genesis.rs: (1) Check if genesis exists via block_db.get_header(0). (2) If not, create genesis block: BlockHeader with number=0, parent_hash=ZERO_HASH, state_root=empty_trie_root, timestamp from config or now(). (3) Process genesis allocations from GenesisConfig::allocs: for each (address, allocation), set account balance and optionally code/storage in state. (4) Compute state_root from populated state trie. (5) Store genesis: put_header(0), put_body(0), set meta.genesis_hash. (6) Initialize block_db latest to 0. This ensures deterministic genesis state across all nodes in network - same genesis config produces identical genesis hash."
+    },
+    {
+      "title": "P2P Message Protocol",
+      "tags": ["network", "p2p", "protocol"],
+      "content": "Bach P2P uses length-prefixed framing over TCP: (1) Wire format: [length:4 bytes BE][type:1 byte][payload:N bytes]. Length field is type + payload length (does not include itself). (2) Message types: Handshake (0x00) with chain_id, genesis_hash, listen_port; Status (0x01) with peer_id, height, best_hash; Transactions (0x02) with Vec<SignedTransaction>; Block (0x03) with Block; GetBlock (0x04) with height; GetBlocks (0x05) with start_height, count; Ping/Pong (0x06/0x07) for keepalive. (3) Connection flow: TCP connect -> send Handshake -> receive Handshake -> validate chain_id and genesis_hash match -> spawn reader/writer tasks -> emit PeerConnected event. (4) Reader loop: read 4-byte length, read message, decode, send to event channel. Writer loop: receive from send channel, encode, write to socket."
+    }
+  ]
+}
