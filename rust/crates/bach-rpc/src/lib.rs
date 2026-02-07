@@ -88,3 +88,8 @@ pub use types::{
     BlockId, CallRequest, CallRequestRaw, JsonRpcId, JsonRpcRequest, JsonRpcResponse, RpcBlock,
     RpcLog, RpcReceipt, RpcTransaction,
 };
+
+/// Decode receipts from binary format (delegates to shared codec in bach-types)
+pub fn decode_receipts(bytes: &[u8]) -> Option<Vec<bach_types::Receipt>> {
+    bach_types::codec::decode_receipts(bytes)
+}

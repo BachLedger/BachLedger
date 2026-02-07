@@ -11,6 +11,7 @@
 #![warn(clippy::all)]
 
 pub mod block;
+pub mod codec;
 pub mod receipt;
 pub mod transaction;
 

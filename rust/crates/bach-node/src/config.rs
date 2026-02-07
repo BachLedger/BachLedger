@@ -30,8 +30,6 @@ pub struct RpcConfig {
     pub enabled: bool,
     /// Listen address
     pub listen_addr: SocketAddr,
-    /// Maximum connections
-    pub max_connections: usize,
 }
 
 impl Default for RpcConfig {
@@ -39,7 +37,6 @@ impl Default for RpcConfig {
         Self {
             enabled: true,
             listen_addr: "0.0.0.0:8545".parse().unwrap(),
-            max_connections: 100,
         }
     }
 }
@@ -160,6 +157,8 @@ pub struct BlockConfig {
     pub gas_limit: u64,
     /// Block time (interval between blocks)
     pub block_time: Duration,
+    /// Coinbase/beneficiary address for block rewards
+    pub coinbase: Option<Address>,
 }
 
 impl Default for BlockConfig {
@@ -167,6 +166,7 @@ impl Default for BlockConfig {
         Self {
             gas_limit: 30_000_000,
             block_time: Duration::from_secs(1),
+            coinbase: None,
         }
     }
 }

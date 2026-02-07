@@ -202,6 +202,7 @@ dependencies = [
  "bach-evm",
  "bach-metrics",
  "bach-primitives",
+ "bach-rlp",
  "bach-scheduler",
  "bach-storage",
  "bach-txpool",
@@ -233,6 +234,7 @@ dependencies = [
  "bach-crypto",
  "bach-evm",
  "bach-primitives",
+ "bach-rlp",
  "bach-scheduler",
  "bach-storage",
  "bach-txpool",
@@ -258,6 +260,7 @@ dependencies = [
  "bach-primitives",
  "bach-storage",
  "bytes",
+ "primitive-types",
  "thiserror",
  "tracing",
 ]

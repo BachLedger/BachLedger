@@ -8,7 +8,7 @@ mod genesis;
 mod node;
 
 use anyhow::Result;
-use bach_rpc::{RpcContext, RpcHandler, RpcServer, ServerConfig};
+use bach_rpc::{RpcHandler, RpcServer, ServerConfig};
 use cli::Cli;
 use config::{default_genesis_config, BlockConfig, GenesisConfig, NodeConfig, RpcConfig};
 use node::Node;
@@ -46,12 +46,12 @@ async fn main() -> Result<()> {
         rpc: RpcConfig {
             enabled: cli.rpc,
             listen_addr: cli.rpc_addr,
-            max_connections: 100,
         },
         genesis: genesis_config,
         block: BlockConfig {
             gas_limit: cli.gas_limit,
             block_time: Duration::from_secs(cli.block_time),
+            coinbase: None,
         },
     };
 
@@ -68,15 +68,10 @@ async fn main() -> Result<()> {
 
     // Start RPC server if enabled
     if config.rpc.enabled {
-        let rpc_ctx = Arc::new(RpcContext::new(
-            node.state_db().clone(),
-            node.block_db().clone(),
-            node.txpool().clone(),
-            node.chain_id(),
-        ));
+        let rpc_ctx = Arc::new(node.create_rpc_context());
         let rpc_handler = RpcHandler::new(rpc_ctx);
-        let rpc_config = ServerConfig::new(config.rpc.listen_addr);
-        let rpc_server = RpcServer::new(rpc_config, rpc_handler);
+        let listen_addr = node.rpc_config().listen_addr;
+        let rpc_server = RpcServer::new(ServerConfig::new(listen_addr), rpc_handler);
 
         // Spawn RPC server in background
         tokio::spawn(async move {
@@ -85,7 +80,7 @@ async fn main() -> Result<()> {
             }
         });
 
-        tracing::info!("RPC server started on {}", config.rpc.listen_addr);
+        tracing::info!("RPC server started on {}", listen_addr);
     }
 
     // Run the node

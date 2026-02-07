@@ -11,6 +11,7 @@ bach-primitives.workspace = true
 bach-crypto.workspace = true
 bach-storage.workspace = true
 bach-metrics.workspace = true
+primitive-types.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 bytes.workspace = true

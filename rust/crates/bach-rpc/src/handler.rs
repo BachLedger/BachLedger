@@ -5,10 +5,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use parking_lot::RwLock;
 use serde_json::Value;
 
-use bach_core::{BlockExecutor, ExecutionState};
 use bach_storage::{BlockDb, StateDb};
 use bach_txpool::TxPool;
 
@@ -31,8 +29,6 @@ pub struct RpcContext {
     pub block_db: Arc<BlockDb>,
     /// Transaction pool
     pub txpool: Arc<TxPool>,
-    /// Block executor (for eth_call/estimateGas)
-    pub executor: RwLock<BlockExecutor>,
     /// Chain ID
     pub chain_id: u64,
     /// Current gas price (in wei)
@@ -51,7 +47,6 @@ impl RpcContext {
             state_db,
             block_db,
             txpool,
-            executor: RwLock::new(BlockExecutor::new(chain_id)),
             chain_id,
             gas_price: std::sync::atomic::AtomicU64::new(1_000_000_000), // 1 gwei default
         }
@@ -66,11 +61,6 @@ impl RpcContext {
     pub fn set_gas_price(&self, price: u64) {
         self.gas_price
             .store(price, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    /// Create a new executor with fresh state for simulation
-    pub fn new_executor(&self) -> BlockExecutor {
-        BlockExecutor::with_state(ExecutionState::new(), self.chain_id)
     }
 }
 
