@@ -108,11 +108,22 @@ pub fn encode_body(body: &BlockBody) -> Vec<u8> {
 /// Decode a block body from bytes.
 pub fn decode_body(bytes: &[u8]) -> Option<BlockBody> {
     if bytes.len() < 4 { return None; }
-    // We only decode the transaction count; full tx deserialization is not yet implemented.
-    Some(BlockBody { transactions: vec![] })
+    let mut pos = 0;
+    let count = u32::from_le_bytes(bytes[pos..pos + 4].try_into().ok()?) as usize; pos += 4;
+    let mut transactions = Vec::with_capacity(count);
+    for _ in 0..count {
+        if pos + 4 > bytes.len() { return None; }
+        let tx_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().ok()?) as usize; pos += 4;
+        if pos + tx_len > bytes.len() { return None; }
+        let tx = decode_signed_tx(&bytes[pos..pos + tx_len])?;
+        transactions.push(tx);
+        pos += tx_len;
+    }
+    Some(BlockBody { transactions })
 }
 
-fn encode_signed_tx(tx: &crate::transaction::SignedTransaction) -> Vec<u8> {
+/// Encode a signed transaction to bytes.
+pub fn encode_signed_tx(tx: &crate::transaction::SignedTransaction) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.extend_from_slice(&tx.nonce().to_le_bytes());
     buf.extend_from_slice(&tx.gas_limit().to_le_bytes());
@@ -131,6 +142,50 @@ fn encode_signed_tx(tx: &crate::transaction::SignedTransaction) -> Vec<u8> {
     buf.extend_from_slice(tx.signature.r.as_bytes());
     buf.extend_from_slice(tx.signature.s.as_bytes());
     buf
+}
+
+/// Decode a signed transaction from bytes.
+pub fn decode_signed_tx(bytes: &[u8]) -> Option<crate::transaction::SignedTransaction> {
+    use crate::transaction::*;
+
+    let mut pos = 0;
+    if bytes.len() < 8 + 8 + 16 + 16 + 1 { return None; }
+
+    let nonce = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?); pos += 8;
+    let gas_limit = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?); pos += 8;
+    let value = u128::from_le_bytes(bytes[pos..pos + 16].try_into().ok()?); pos += 16;
+    let gas_price = u128::from_le_bytes(bytes[pos..pos + 16].try_into().ok()?); pos += 16;
+
+    let to = if bytes[pos] == 1 {
+        pos += 1;
+        if pos + 20 > bytes.len() { return None; }
+        let addr = Address::from_slice(&bytes[pos..pos + 20]).ok()?; pos += 20;
+        Some(addr)
+    } else {
+        pos += 1;
+        None
+    };
+
+    if pos + 4 > bytes.len() { return None; }
+    let data_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().ok()?) as usize; pos += 4;
+    if pos + data_len > bytes.len() { return None; }
+    let data = bytes[pos..pos + data_len].to_vec(); pos += data_len;
+
+    if pos + 8 + 32 + 32 > bytes.len() { return None; }
+    let v = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?); pos += 8;
+    let r = H256::from_slice(&bytes[pos..pos + 32]).ok()?; pos += 32;
+    let s = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
+
+    let legacy = LegacyTx {
+        nonce, gas_price, gas_limit, to, value, data: data.into(),
+    };
+    Some(SignedTransaction::new_legacy(legacy, TxSignature { v, r, s }))
+}
+
+/// Compute the hash of an encoded signed transaction.
+pub fn tx_hash(tx: &crate::transaction::SignedTransaction) -> H256 {
+    let encoded = encode_signed_tx(tx);
+    bach_crypto::keccak256(&encoded)
 }
 
 // ============================================================================
