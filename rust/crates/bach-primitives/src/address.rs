@@ -92,6 +92,26 @@ impl AsRef<[u8]> for Address {
     }
 }
 
+// Serde implementation (behind feature flag)
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use super::*;
+    use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for Address {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.serialize_str(&self.to_hex())
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Address {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let s = String::deserialize(deserializer)?;
+            Address::from_hex(&s).map_err(de::Error::custom)
+        }
+    }
+}
+
 // RLP implementation (behind feature flag)
 #[cfg(feature = "rlp")]
 mod rlp_impl {

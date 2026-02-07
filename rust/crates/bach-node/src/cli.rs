@@ -41,6 +41,22 @@ pub struct Cli {
     /// Log level (trace, debug, info, warn, error)
     #[arg(long, default_value = "info")]
     pub log_level: String,
+
+    /// P2P listen address
+    #[arg(long, default_value = "0.0.0.0:30303")]
+    pub p2p_addr: SocketAddr,
+
+    /// Bootstrap peer addresses (comma-separated, e.g. "1.2.3.4:30303,5.6.7.8:30303")
+    #[arg(long, default_value = "")]
+    pub bootnodes: String,
+
+    /// Validator private key (hex, without 0x prefix)
+    #[arg(long, default_value = "")]
+    pub validator_key: String,
+
+    /// Validator addresses (comma-separated hex addresses for the validator set)
+    #[arg(long, default_value = "")]
+    pub validators: String,
 }
 
 impl Cli {

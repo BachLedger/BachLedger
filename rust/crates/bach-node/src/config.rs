@@ -21,6 +21,10 @@ pub struct NodeConfig {
     pub genesis: GenesisConfig,
     /// Block configuration
     pub block: BlockConfig,
+    /// P2P network configuration
+    pub p2p: P2pConfig,
+    /// Consensus configuration
+    pub consensus: ConsensusConfig,
 }
 
 /// RPC server configuration
@@ -167,6 +171,42 @@ impl Default for BlockConfig {
             gas_limit: 30_000_000,
             block_time: Duration::from_secs(1),
             coinbase: None,
+        }
+    }
+}
+
+/// P2P network configuration
+#[derive(Debug, Clone)]
+pub struct P2pConfig {
+    /// P2P listen address
+    pub listen_addr: SocketAddr,
+    /// Bootstrap peer addresses
+    pub bootnodes: Vec<SocketAddr>,
+}
+
+impl Default for P2pConfig {
+    fn default() -> Self {
+        Self {
+            listen_addr: "0.0.0.0:30303".parse().unwrap(),
+            bootnodes: Vec::new(),
+        }
+    }
+}
+
+/// Consensus configuration
+#[derive(Debug, Clone)]
+pub struct ConsensusConfig {
+    /// Validator private key bytes (32 bytes). Empty means non-validator mode.
+    pub validator_key: Vec<u8>,
+    /// Validator addresses (defines the validator set)
+    pub validator_addrs: Vec<Address>,
+}
+
+impl Default for ConsensusConfig {
+    fn default() -> Self {
+        Self {
+            validator_key: Vec::new(),
+            validator_addrs: Vec::new(),
         }
     }
 }

@@ -414,8 +414,22 @@ pub async fn eth_send_raw_transaction(
     }
 
     ctx.txpool
-        .add(signed_tx, sender, tx_hash)
+        .add(signed_tx.clone(), sender, tx_hash)
         .map_err(|e| JsonRpcError::transaction_rejected(e.to_string()))?;
+
+    // Broadcast to peers if network is available
+    if let Some(ref network) = ctx.network {
+        let tx_encoded = bach_types::codec::encode_signed_tx(&signed_tx);
+        let broadcast = bach_network::TxBroadcast::new(tx_hash, tx_encoded);
+        if let Ok(payload) = serde_json::to_vec(&broadcast) {
+            let msg = bach_network::Message::new(
+                bach_network::MessageType::TxBroadcast,
+                payload.into(),
+            );
+            network.broadcast(msg).await;
+            tracing::debug!("Broadcasted tx {} to peers", tx_hash.to_hex());
+        }
+    }
 
     Ok(Value::String(tx_hash.to_hex()))
 }

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// TBFT state machine step
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Step {
     /// Waiting for new round to start
     NewRound,
@@ -138,7 +138,7 @@ impl Default for TbftConfig {
 }
 
 /// Messages output by the consensus engine
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ConsensusMessage {
     /// Broadcast a proposal
     Proposal(Proposal),

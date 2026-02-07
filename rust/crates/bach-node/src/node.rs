@@ -47,6 +47,7 @@ pub struct Node {
     txpool: Arc<TxPool>,
     executor: Arc<RwLock<BlockExecutor>>,
     running: Arc<RwLock<bool>>,
+    genesis_hash: H256,
 }
 
 #[allow(dead_code)]
@@ -70,6 +71,11 @@ impl Node {
             genesis_builder.init_genesis(&mut state_db, &block_db)?;
         }
 
+        // Compute genesis hash
+        let genesis_hash = block_db
+            .get_hash_by_number(0)?
+            .unwrap_or(H256::ZERO);
+
         let state_db = Arc::new(state_db);
         let block_db = Arc::new(block_db);
 
@@ -90,6 +96,7 @@ impl Node {
             txpool,
             executor,
             running: Arc::new(RwLock::new(false)),
+            genesis_hash,
         })
     }
 
@@ -116,6 +123,16 @@ impl Node {
     /// Get the chain ID
     pub fn chain_id(&self) -> u64 {
         self.config.chain_id
+    }
+
+    /// Get genesis hash
+    pub fn genesis_hash(&self) -> H256 {
+        self.genesis_hash
+    }
+
+    /// Get the node config
+    pub fn config(&self) -> &NodeConfig {
+        &self.config
     }
 
     /// Get the RPC config
@@ -393,6 +410,8 @@ mod tests {
             rpc: RpcConfig::default(),
             genesis: default_genesis_config(),
             block: BlockConfig::default(),
+            p2p: crate::config::P2pConfig::default(),
+            consensus: crate::config::ConsensusConfig::default(),
         }
     }
 

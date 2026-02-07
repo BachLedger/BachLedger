@@ -4,13 +4,22 @@
 
 mod cli;
 mod config;
+mod consensus_driver;
 mod genesis;
 mod node;
 
 use anyhow::Result;
+use bach_consensus::{TbftConfig, TbftConsensus, Validator, ValidatorSet};
+use bach_crypto::public_key_to_address;
+use bach_network::{NetworkConfig, NetworkService, PeerId};
 use bach_rpc::{RpcHandler, RpcServer, ServerConfig};
 use cli::Cli;
-use config::{default_genesis_config, BlockConfig, GenesisConfig, NodeConfig, RpcConfig};
+use config::{
+    default_genesis_config, BlockConfig, ConsensusConfig, GenesisConfig, NodeConfig, P2pConfig,
+    RpcConfig,
+};
+use consensus_driver::ConsensusDriver;
+use k256::ecdsa::SigningKey;
 use node::Node;
 use std::sync::Arc;
 use std::time::Duration;
@@ -39,6 +48,30 @@ async fn main() -> Result<()> {
         default_genesis_config()
     };
 
+    // Parse bootnodes
+    let bootnodes: Vec<std::net::SocketAddr> = cli
+        .bootnodes
+        .split(',')
+        .filter(|s| !s.trim().is_empty())
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+
+    // Parse validator key
+    let validator_key = if !cli.validator_key.is_empty() {
+        let key_hex = cli.validator_key.strip_prefix("0x").unwrap_or(&cli.validator_key);
+        hex::decode(key_hex).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    // Parse validator addresses
+    let validator_addrs: Vec<bach_primitives::Address> = cli
+        .validators
+        .split(',')
+        .filter(|s| !s.trim().is_empty())
+        .filter_map(|s| config::parse_address(s.trim()))
+        .collect();
+
     // Build node configuration
     let config = NodeConfig {
         datadir: cli.datadir,
@@ -53,41 +86,131 @@ async fn main() -> Result<()> {
             block_time: Duration::from_secs(cli.block_time),
             coinbase: None,
         },
+        p2p: P2pConfig {
+            listen_addr: cli.p2p_addr,
+            bootnodes,
+        },
+        consensus: ConsensusConfig {
+            validator_key,
+            validator_addrs,
+        },
     };
 
-    // Create and run node
+    // Create the node
     let node = Arc::new(Node::new(config.clone()).await?);
 
-    // Handle Ctrl+C for graceful shutdown
-    let node_clone = Arc::clone(&node);
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.ok();
-        tracing::info!("Shutdown signal received");
-        node_clone.stop().await;
-    });
+    // Determine whether to run in consensus mode or solo mode
+    let has_validators = !config.consensus.validator_addrs.is_empty()
+        && !config.consensus.validator_key.is_empty();
 
-    // Start RPC server if enabled
-    if config.rpc.enabled {
-        let rpc_ctx = Arc::new(node.create_rpc_context());
-        let rpc_handler = RpcHandler::new(rpc_ctx);
-        let listen_addr = node.rpc_config().listen_addr;
-        let rpc_server = RpcServer::new(ServerConfig::new(listen_addr), rpc_handler);
+    if has_validators {
+        // ── Consensus mode: start network + TBFT ───────────────────
+        tracing::info!("Starting in consensus mode with {} validators", config.consensus.validator_addrs.len());
 
-        // Spawn RPC server in background
+        // Load signing key
+        let signing_key = SigningKey::from_slice(&config.consensus.validator_key)
+            .map_err(|e| anyhow::anyhow!("Invalid validator key: {}", e))?;
+        let our_address = public_key_to_address(signing_key.verifying_key());
+        tracing::info!("Validator address: {}", our_address);
+
+        // Build validator set
+        let validators: Vec<Validator> = config
+            .consensus
+            .validator_addrs
+            .iter()
+            .map(|addr| Validator::new(*addr, 100))
+            .collect();
+        let validator_set = ValidatorSet::from_validators(validators);
+
+        // Build and start network service
+        let net_config = NetworkConfig {
+            listen_addr: config.p2p.listen_addr,
+            bootstrap_peers: config.p2p.bootnodes.clone(),
+            max_peers: 50,
+            protocol_version: 1,
+            chain_id: config.chain_id,
+            genesis_hash: node.genesis_hash(),
+            peer_id: PeerId::random(),
+        };
+        let mut network = NetworkService::new(net_config);
+        let net_events = network.take_events().unwrap();
+        let network = Arc::new(network);
+
+        network.start().await.map_err(|e| anyhow::anyhow!("Network start failed: {}", e))?;
+        tracing::info!("P2P network started on {}", config.p2p.listen_addr);
+
+        // Start RPC server with network reference
+        if config.rpc.enabled {
+            let rpc_ctx = Arc::new(bach_rpc::RpcContext::with_network(
+                node.state_db().clone(),
+                node.block_db().clone(),
+                node.txpool().clone(),
+                node.chain_id(),
+                network.clone(),
+            ));
+            let rpc_handler = RpcHandler::new(rpc_ctx);
+            let listen_addr = node.rpc_config().listen_addr;
+            let rpc_server = RpcServer::new(ServerConfig::new(listen_addr), rpc_handler);
+            tokio::spawn(async move {
+                if let Err(e) = rpc_server.run().await {
+                    tracing::error!("RPC server error: {}", e);
+                }
+            });
+            tracing::info!("RPC server started on {}", listen_addr);
+        }
+
+        // Build consensus engine
+        let tbft_config = TbftConfig {
+            address: our_address,
+            ..Default::default()
+        };
+        let consensus = TbftConsensus::new(tbft_config, validator_set);
+
+        // Shutdown channel
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let node_clone = Arc::clone(&node);
         tokio::spawn(async move {
-            if let Err(e) = rpc_server.run().await {
-                tracing::error!("RPC server error: {}", e);
-            }
+            tokio::signal::ctrl_c().await.ok();
+            tracing::info!("Shutdown signal received");
+            node_clone.stop().await;
+            let _ = shutdown_tx.send(true);
         });
 
-        tracing::info!("RPC server started on {}", listen_addr);
+        let driver = ConsensusDriver::new(
+            consensus,
+            network,
+            node.txpool().clone(),
+            node.executor().clone(),
+            node.state_db().clone(),
+            node.block_db().clone(),
+            node.chain_id(),
+            config.block.gas_limit,
+            Some(signing_key),
+        );
+
+        driver.run(net_events, shutdown_rx).await;
+    } else {
+        // ── Solo mode: simple timer-based block production ─────────
+        tracing::info!("Starting in solo mode (no validators configured)");
+
+        // Start RPC server without network
+        if config.rpc.enabled {
+            let rpc_ctx = Arc::new(node.create_rpc_context());
+            let rpc_handler = RpcHandler::new(rpc_ctx);
+            let listen_addr = node.rpc_config().listen_addr;
+            let rpc_server = RpcServer::new(ServerConfig::new(listen_addr), rpc_handler);
+            tokio::spawn(async move {
+                if let Err(e) = rpc_server.run().await {
+                    tracing::error!("RPC server error: {}", e);
+                }
+            });
+            tracing::info!("RPC server started on {}", listen_addr);
+        }
+
+        node.run().await?;
     }
 
-    // Run the node
-    node.run().await?;
-
     tracing::info!("BachLedger node stopped");
-
     Ok(())
 }
 

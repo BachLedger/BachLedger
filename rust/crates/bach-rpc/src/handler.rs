@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+use bach_network::NetworkService;
 use bach_storage::{BlockDb, StateDb};
 use bach_txpool::TxPool;
 
@@ -33,6 +34,8 @@ pub struct RpcContext {
     pub chain_id: u64,
     /// Current gas price (in wei)
     pub gas_price: std::sync::atomic::AtomicU64,
+    /// Optional network service for transaction broadcasting
+    pub network: Option<Arc<NetworkService>>,
 }
 
 impl RpcContext {
@@ -48,7 +51,26 @@ impl RpcContext {
             block_db,
             txpool,
             chain_id,
-            gas_price: std::sync::atomic::AtomicU64::new(1_000_000_000), // 1 gwei default
+            gas_price: std::sync::atomic::AtomicU64::new(1_000_000_000),
+            network: None,
+        }
+    }
+
+    /// Create a new RPC context with network service
+    pub fn with_network(
+        state_db: Arc<StateDb>,
+        block_db: Arc<BlockDb>,
+        txpool: Arc<TxPool>,
+        chain_id: u64,
+        network: Arc<NetworkService>,
+    ) -> Self {
+        Self {
+            state_db,
+            block_db,
+            txpool,
+            chain_id,
+            gas_price: std::sync::atomic::AtomicU64::new(1_000_000_000),
+            network: Some(network),
         }
     }
 

@@ -1,9 +1,26 @@
 //! Consensus types
 
 use bach_primitives::{Address, H256};
+use serde::{Deserialize, Serialize};
+
+/// Serde helper for `[u8; 65]` signature fields (hex-encoded).
+mod sig_serde {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8; 65], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&hex::encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 65], D::Error> {
+        let hex_str = String::deserialize(d)?;
+        let v = hex::decode(&hex_str).map_err(serde::de::Error::custom)?;
+        let arr: [u8; 65] = v.try_into().map_err(|_| serde::de::Error::custom("expected 65 bytes"))?;
+        Ok(arr)
+    }
+}
 
 /// Vote type in TBFT
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VoteType {
     /// Prevote - first voting round
     Prevote,
@@ -12,7 +29,7 @@ pub enum VoteType {
 }
 
 /// A vote in the consensus protocol
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vote {
     /// Vote type
     pub vote_type: VoteType,
@@ -25,6 +42,7 @@ pub struct Vote {
     /// Voter address
     pub voter: Address,
     /// Signature (r, s, v)
+    #[serde(with = "sig_serde")]
     pub signature: [u8; 65],
 }
 
@@ -72,7 +90,7 @@ impl Vote {
 }
 
 /// Block proposal
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposal {
     /// Block height
     pub height: u64,
@@ -84,7 +102,11 @@ pub struct Proposal {
     pub proposer: Address,
     /// Proposal timestamp
     pub timestamp: u64,
+    /// Encoded transaction data (OEV: carries ordered transactions)
+    #[serde(default)]
+    pub tx_data: Vec<u8>,
     /// Signature
+    #[serde(with = "sig_serde")]
     pub signature: [u8; 65],
 }
 
@@ -97,6 +119,7 @@ impl Proposal {
             block_hash,
             proposer,
             timestamp,
+            tx_data: Vec::new(),
             signature: [0u8; 65],
         }
     }
@@ -104,6 +127,12 @@ impl Proposal {
     /// Set signature
     pub fn with_signature(mut self, signature: [u8; 65]) -> Self {
         self.signature = signature;
+        self
+    }
+
+    /// Set transaction data
+    pub fn with_tx_data(mut self, tx_data: Vec<u8>) -> Self {
+        self.tx_data = tx_data;
         self
     }
 
@@ -119,7 +148,7 @@ impl Proposal {
 }
 
 /// Validator info
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Validator {
     /// Validator address
     pub address: Address,
@@ -220,7 +249,7 @@ impl ValidatorSet {
 }
 
 /// Commit (aggregated precommit votes for a block)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Commit {
     /// Block height
     pub height: u64,
