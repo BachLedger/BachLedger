@@ -4,6 +4,7 @@ use crate::config::{parse_address, GenesisConfig};
 use bach_crypto::keccak256;
 use bach_primitives::{Address, H256, U256};
 use bach_storage::{Account, BlockDb, StateDb, StateWriter, EMPTY_CODE_HASH, EMPTY_STORAGE_ROOT};
+use bach_types::codec;
 use bach_types::{Block, BlockBody, BlockHeader, Bloom};
 use bytes::Bytes;
 use thiserror::Error;
@@ -144,6 +145,9 @@ impl GenesisBuilder {
         block_db.set_latest_block(0)?;
         block_db.set_finalized_block(0)?;
 
+        // Store chain_id in metadata for consistency validation on restart
+        block_db.put_meta(b"chain_id", &self.chain_id.to_le_bytes())?;
+
         tracing::info!(
             "Genesis block initialized: hash={}, allocations={}",
             hash.to_hex(),
@@ -170,181 +174,17 @@ const EMPTY_RECEIPTS_ROOT: H256 = H256::from_bytes([
     0x5b, 0x48, 0xe0, 0x1b, 0x99, 0x6c, 0xad, 0xc0, 0x01, 0x62, 0x2f, 0xb5, 0xe3, 0x63, 0xb4, 0x21,
 ]);
 
-/// Compute block hash (simplified)
+/// Compute block hash
 pub fn compute_block_hash(block: &Block) -> H256 {
-    let header_bytes = encode_header(&block.header);
-    keccak256(&header_bytes)
+    keccak256(&codec::encode_header(&block.header))
 }
 
-/// Encode block header (simplified binary encoding)
-pub fn encode_header(header: &BlockHeader) -> Vec<u8> {
-    let mut buf = Vec::new();
-
-    // Parent hash (32 bytes)
-    buf.extend_from_slice(header.parent_hash.as_bytes());
-    // Ommers hash (32 bytes)
-    buf.extend_from_slice(header.ommers_hash.as_bytes());
-    // Beneficiary (20 bytes)
-    buf.extend_from_slice(header.beneficiary.as_bytes());
-    // State root (32 bytes)
-    buf.extend_from_slice(header.state_root.as_bytes());
-    // Transactions root (32 bytes)
-    buf.extend_from_slice(header.transactions_root.as_bytes());
-    // Receipts root (32 bytes)
-    buf.extend_from_slice(header.receipts_root.as_bytes());
-    // Logs bloom (256 bytes)
-    buf.extend_from_slice(&header.logs_bloom.0);
-    // Difficulty (16 bytes)
-    buf.extend_from_slice(&header.difficulty.to_le_bytes());
-    // Number (8 bytes)
-    buf.extend_from_slice(&header.number.to_le_bytes());
-    // Gas limit (8 bytes)
-    buf.extend_from_slice(&header.gas_limit.to_le_bytes());
-    // Gas used (8 bytes)
-    buf.extend_from_slice(&header.gas_used.to_le_bytes());
-    // Timestamp (8 bytes)
-    buf.extend_from_slice(&header.timestamp.to_le_bytes());
-    // Extra data length (4 bytes) + extra data
-    buf.extend_from_slice(&(header.extra_data.len() as u32).to_le_bytes());
-    buf.extend_from_slice(&header.extra_data);
-    // Mix hash (32 bytes)
-    buf.extend_from_slice(header.mix_hash.as_bytes());
-    // Nonce (8 bytes)
-    buf.extend_from_slice(&header.nonce.to_le_bytes());
-    // Base fee (1 byte flag + 16 bytes if Some)
-    if let Some(base_fee) = header.base_fee_per_gas {
-        buf.push(1);
-        buf.extend_from_slice(&base_fee.to_le_bytes());
-    } else {
-        buf.push(0);
-    }
-
-    buf
-}
-
-/// Encode block body (simplified - just store tx count for now since body encoding is complex)
-pub fn encode_body(body: &BlockBody) -> Vec<u8> {
-    let mut buf = Vec::new();
-    // Number of transactions
-    buf.extend_from_slice(&(body.transactions.len() as u32).to_le_bytes());
-    // TODO: For a full implementation, we'd RLP encode each transaction
-    // For now, we just store the count as a placeholder
-    buf
-}
-
-/// Encode receipts (simplified)
-pub fn encode_receipts(receipts: &[bach_types::Receipt]) -> Vec<u8> {
-    let mut buf = Vec::new();
-    buf.extend_from_slice(&(receipts.len() as u32).to_le_bytes());
-    // TODO: For a full implementation, we'd encode each receipt
-    buf
-}
-
-/// Decode block header
-pub fn decode_header(bytes: &[u8]) -> Option<BlockHeader> {
-    if bytes.len() < 32 + 32 + 20 + 32 + 32 + 32 + 256 + 16 + 8 + 8 + 8 + 8 + 4 {
-        return None;
-    }
-
-    let mut pos = 0;
-
-    let parent_hash = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
-    pos += 32;
-
-    let ommers_hash = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
-    pos += 32;
-
-    let beneficiary = Address::from_slice(&bytes[pos..pos + 20]).ok()?;
-    pos += 20;
-
-    let state_root = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
-    pos += 32;
-
-    let transactions_root = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
-    pos += 32;
-
-    let receipts_root = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
-    pos += 32;
-
-    let mut bloom_bytes = [0u8; 256];
-    bloom_bytes.copy_from_slice(&bytes[pos..pos + 256]);
-    let logs_bloom = Bloom::from_bytes(bloom_bytes);
-    pos += 256;
-
-    let difficulty = u128::from_le_bytes(bytes[pos..pos + 16].try_into().ok()?);
-    pos += 16;
-
-    let number = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?);
-    pos += 8;
-
-    let gas_limit = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?);
-    pos += 8;
-
-    let gas_used = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?);
-    pos += 8;
-
-    let timestamp = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?);
-    pos += 8;
-
-    let extra_data_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().ok()?) as usize;
-    pos += 4;
-
-    if pos + extra_data_len > bytes.len() {
-        return None;
-    }
-    let extra_data = Bytes::copy_from_slice(&bytes[pos..pos + extra_data_len]);
-    pos += extra_data_len;
-
-    if pos + 32 + 8 + 1 > bytes.len() {
-        return None;
-    }
-
-    let mix_hash = H256::from_slice(&bytes[pos..pos + 32]).ok()?;
-    pos += 32;
-
-    let nonce = u64::from_le_bytes(bytes[pos..pos + 8].try_into().ok()?);
-    pos += 8;
-
-    let base_fee_per_gas = if bytes[pos] == 1 {
-        pos += 1;
-        if pos + 16 > bytes.len() {
-            return None;
-        }
-        Some(u128::from_le_bytes(bytes[pos..pos + 16].try_into().ok()?))
-    } else {
-        None
-    };
-
-    Some(BlockHeader {
-        parent_hash,
-        ommers_hash,
-        beneficiary,
-        state_root,
-        transactions_root,
-        receipts_root,
-        logs_bloom,
-        difficulty,
-        number,
-        gas_limit,
-        gas_used,
-        timestamp,
-        extra_data,
-        mix_hash,
-        nonce,
-        base_fee_per_gas,
-    })
-}
-
-/// Decode block body (simplified - returns empty body for now)
-pub fn decode_body(bytes: &[u8]) -> Option<BlockBody> {
-    if bytes.len() < 4 {
-        return None;
-    }
-    // TODO: For a full implementation, we'd decode each transaction
-    Some(BlockBody {
-        transactions: vec![],
-    })
-}
+// Re-export codec functions for use by node.rs
+pub use codec::encode_header;
+pub use codec::encode_body;
+pub use codec::encode_receipts;
+pub use codec::decode_header;
+pub use codec::decode_body;
 
 #[cfg(test)]
 mod tests {

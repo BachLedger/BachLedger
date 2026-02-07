@@ -52,6 +52,8 @@ pub use gas::{cost, static_gas, memory_gas, copy_gas, exp_gas, sha3_gas, log_gas
 pub use stack::{Stack, U256, U256_ZERO, U256_ONE, U256_MAX};
 pub use stack::{u64_to_u256, u128_to_u256, u256_to_u64, u256_to_usize, u256_is_zero};
 pub use stack::{u256_add, u256_sub, u256_and, u256_or, u256_xor, u256_not, u256_lt, u256_gt, u256_cmp};
+pub use stack::{u256_mul, u256_div, u256_mod, u256_sdiv, u256_smod, u256_addmod, u256_mulmod};
+pub use stack::{u256_exp, u256_signextend, u256_byte, u256_shl, u256_shr, u256_sar, u256_slt, u256_sgt};
 pub use memory::Memory;
 pub use context::{CallContext, BlockContext, TxContext, Environment};
-pub use interpreter::Interpreter;
+pub use interpreter::{Interpreter, StateAccess, NullState};

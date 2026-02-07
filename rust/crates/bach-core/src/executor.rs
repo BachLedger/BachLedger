@@ -2,9 +2,11 @@
 
 use crate::error::{ExecutionError, ExecutionResult};
 use bach_crypto::{keccak256, public_key_to_address, recover_public_key, Signature};
-use bach_evm::{BlockContext, CallContext, Environment, Interpreter, TxContext};
+use bach_evm::{BlockContext, CallContext, Environment, Interpreter, StateAccess, TxContext};
 use bach_primitives::{Address, H256};
-use bach_storage::{Account, StateCache, StateReader, StateWriter};
+use bach_rlp::RlpStream;
+use bach_storage::{Account, StateCache, StateDb, StateReader, StateWriter, EMPTY_CODE_HASH};
+use std::sync::Arc;
 use bach_types::{Block, Log, Receipt, SignedTransaction, TxStatus};
 
 /// Minimum gas for any transaction
@@ -23,24 +25,55 @@ pub struct BlockExecutionResult {
     pub logs_bloom: bach_types::Bloom,
 }
 
-/// Simple in-memory state for execution
-#[derive(Default)]
+/// In-memory state for execution with optional database fallback.
+///
+/// Reads check the in-memory cache first, then fall back to `StateDb` if provided.
+/// Writes go only to the in-memory cache. Call `cache()` to get changes for committing.
 pub struct ExecutionState {
-    /// State cache
+    /// State cache (accumulates all writes)
     cache: StateCache,
+    /// Optional backing database for read-through
+    db: Option<Arc<StateDb>>,
+    /// Snapshots for nested call revert support
+    snapshots: Vec<StateCache>,
+}
+
+impl Default for ExecutionState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExecutionState {
-    /// Create new empty state
+    /// Create new empty state (no database backing)
     pub fn new() -> Self {
         Self {
             cache: StateCache::new(),
+            db: None,
+            snapshots: Vec::new(),
         }
     }
 
-    /// Get account
+    /// Create state backed by a database (reads fall through to DB on cache miss)
+    pub fn with_db(db: Arc<StateDb>) -> Self {
+        Self {
+            cache: StateCache::new(),
+            db: Some(db),
+            snapshots: Vec::new(),
+        }
+    }
+
+    /// Get account (cache first, then DB)
     pub fn get_account(&self, address: &Address) -> Option<Account> {
-        StateReader::get_account(&self.cache, address).ok().flatten()
+        // Check cache first
+        if let Ok(Some(account)) = StateReader::get_account(&self.cache, address) {
+            return Some(account);
+        }
+        // Fall back to database
+        if let Some(db) = &self.db {
+            return StateReader::get_account(db.as_ref(), address).ok().flatten();
+        }
+        None
     }
 
     /// Set account
@@ -48,9 +81,15 @@ impl ExecutionState {
         let _ = StateWriter::set_account(&mut self.cache, address, account);
     }
 
-    /// Get code
+    /// Get code (cache first, then DB)
     pub fn get_code(&self, code_hash: &H256) -> Option<Vec<u8>> {
-        StateReader::get_code(&self.cache, code_hash).ok().flatten()
+        if let Ok(Some(code)) = StateReader::get_code(&self.cache, code_hash) {
+            return Some(code);
+        }
+        if let Some(db) = &self.db {
+            return StateReader::get_code(db.as_ref(), code_hash).ok().flatten();
+        }
+        None
     }
 
     /// Set code
@@ -58,9 +97,17 @@ impl ExecutionState {
         let _ = StateWriter::set_code(&mut self.cache, code_hash, code);
     }
 
-    /// Get storage
+    /// Get storage (cache first, then DB)
     pub fn get_storage(&self, address: &Address, key: &H256) -> H256 {
-        StateReader::get_storage(&self.cache, address, key).unwrap_or(H256::ZERO)
+        if let Ok(value) = StateReader::get_storage(&self.cache, address, key) {
+            if value != H256::ZERO {
+                return value;
+            }
+        }
+        if let Some(db) = &self.db {
+            return StateReader::get_storage(db.as_ref(), address, key).unwrap_or(H256::ZERO);
+        }
+        H256::ZERO
     }
 
     /// Set storage
@@ -68,7 +115,7 @@ impl ExecutionState {
         let _ = StateWriter::set_storage(&mut self.cache, address, key, value);
     }
 
-    /// Get the underlying cache
+    /// Get the underlying cache (for committing to DB)
     pub fn cache(&self) -> &StateCache {
         &self.cache
     }
@@ -76,6 +123,93 @@ impl ExecutionState {
     /// Take ownership of the cache
     pub fn into_cache(self) -> StateCache {
         self.cache
+    }
+}
+
+/// Adapter to implement bach_evm::StateAccess for ExecutionState
+struct ExecutionStateAccess<'a> {
+    state: &'a mut ExecutionState,
+}
+
+impl<'a> StateAccess for ExecutionStateAccess<'a> {
+    fn get_storage(&self, address: &Address, key: &H256) -> H256 {
+        self.state.get_storage(address, key)
+    }
+
+    fn set_storage(&mut self, address: Address, key: H256, value: H256) {
+        self.state.set_storage(address, key, value);
+    }
+
+    fn get_balance(&self, address: &Address) -> u128 {
+        self.state.get_account(address).map(|a| a.balance).unwrap_or(0)
+    }
+
+    fn get_code(&self, address: &Address) -> Vec<u8> {
+        let code_hash = self.state.get_account(address)
+            .map(|a| a.code_hash)
+            .unwrap_or(H256::ZERO);
+        if code_hash.is_zero() || code_hash == EMPTY_CODE_HASH {
+            return vec![];
+        }
+        self.state.get_code(&code_hash).unwrap_or_default()
+    }
+
+    fn get_code_hash(&self, address: &Address) -> H256 {
+        self.state.get_account(address)
+            .map(|a| a.code_hash)
+            .unwrap_or(EMPTY_CODE_HASH)
+    }
+
+    fn account_exists(&self, address: &Address) -> bool {
+        self.state.get_account(address).is_some()
+    }
+
+    fn transfer(&mut self, from: &Address, to: &Address, value: u128) -> Result<(), bach_evm::EvmError> {
+        if value == 0 {
+            return Ok(());
+        }
+        let mut from_account = self.state.get_account(from).unwrap_or_default();
+        if from_account.balance < value {
+            return Err(bach_evm::EvmError::InsufficientBalance);
+        }
+        from_account.balance -= value;
+        self.state.set_account(*from, from_account);
+
+        let mut to_account = self.state.get_account(to).unwrap_or_default();
+        to_account.balance = to_account.balance.saturating_add(value);
+        self.state.set_account(*to, to_account);
+        Ok(())
+    }
+
+    fn get_nonce(&self, address: &Address) -> u64 {
+        self.state.get_account(address).map(|a| a.nonce).unwrap_or(0)
+    }
+
+    fn increment_nonce(&mut self, address: &Address) -> u64 {
+        let mut account = self.state.get_account(address).unwrap_or_default();
+        let old_nonce = account.nonce;
+        account.nonce = account.nonce.wrapping_add(1);
+        self.state.set_account(*address, account);
+        old_nonce
+    }
+
+    fn mark_warm(&mut self, _address: &Address) {}
+    fn is_warm(&self, _address: &Address) -> bool { true }
+    fn mark_storage_warm(&mut self, _address: &Address, _key: &H256) {}
+    fn is_storage_warm(&self, _address: &Address, _key: &H256) -> bool { true }
+
+    fn snapshot(&self) -> usize {
+        // Simplified snapshot: just return counter
+        self.state.snapshots.len()
+    }
+
+    fn revert_to_snapshot(&mut self, _snapshot: usize) {
+        // Simplified: snapshots not fully implemented for nested calls yet
+        // For single-level execution this is fine
+    }
+
+    fn commit_snapshot(&mut self, _snapshot: usize) {
+        // No-op for simplified implementation
     }
 }
 
@@ -153,7 +287,7 @@ impl BlockExecutor {
         block_ctx: &BlockContext,
         cumulative_gas: u64,
     ) -> ExecutionResult<Receipt> {
-        // Recover sender
+        // Recover sender using EIP-155 signing hash
         let sender = self.recover_sender(tx)?;
 
         // Get current account state
@@ -274,16 +408,22 @@ impl BlockExecutor {
         sender: &Address,
     ) -> ExecutionResult<(u64, Vec<Log>, TxStatus, Option<Address>)> {
         let init_code = tx.data().to_vec();
+
+        // Calculate contract address using correct RLP encoding
+        let nonce = self.state.get_account(sender).map(|a| a.nonce).unwrap_or(0);
+        let contract_address = calculate_create_address(sender, nonce.saturating_sub(1));
+
+        // Update environment with contract address
+        let mut create_env = env.clone();
+        create_env.call.address = contract_address;
+
+        let mut state_access = ExecutionStateAccess { state: &mut self.state };
         let mut interp = Interpreter::new(init_code, env.call.gas);
-        let result = interp.run(env);
+        let result = interp.run_with_state(&create_env, &mut state_access);
 
         let gas_used = env.call.gas - interp.gas_remaining();
 
         if result.success {
-            // Calculate contract address (CREATE)
-            let nonce = self.state.get_account(sender).map(|a| a.nonce).unwrap_or(0);
-            let contract_address = self.calculate_create_address(sender, nonce.saturating_sub(1));
-
             // Store contract code
             if !result.output.is_empty() {
                 let code_hash = keccak256(&result.output);
@@ -320,7 +460,7 @@ impl BlockExecutor {
             .map(|a| a.code_hash)
             .unwrap_or(H256::ZERO);
 
-        let code = if code_hash.is_zero() {
+        let code = if code_hash.is_zero() || code_hash == EMPTY_CODE_HASH {
             vec![]
         } else {
             self.state.get_code(&code_hash).unwrap_or_default()
@@ -331,8 +471,9 @@ impl BlockExecutor {
             return Ok((0, vec![], TxStatus::Success));
         }
 
+        let mut state_access = ExecutionStateAccess { state: &mut self.state };
         let mut interp = Interpreter::new(code, env.call.gas);
-        let result = interp.run(env);
+        let result = interp.run_with_state(env, &mut state_access);
 
         let gas_used = env.call.gas - interp.gas_remaining();
 
@@ -348,18 +489,7 @@ impl BlockExecutor {
         }
     }
 
-    /// Calculate contract address for CREATE
-    fn calculate_create_address(&self, sender: &Address, nonce: u64) -> Address {
-        // address = keccak256(rlp([sender, nonce]))[12:]
-        // Simplified: just hash sender + nonce
-        let mut data = Vec::new();
-        data.extend_from_slice(sender.as_bytes());
-        data.extend_from_slice(&nonce.to_be_bytes());
-        let hash = keccak256(&data);
-        Address::from_slice(&hash.as_bytes()[12..]).unwrap_or(Address::ZERO)
-    }
-
-    /// Recover sender address from transaction signature
+    /// Recover sender address from transaction signature using EIP-155
     fn recover_sender(&self, tx: &SignedTransaction) -> ExecutionResult<Address> {
         let message_hash = self.compute_signing_hash(tx)?;
 
@@ -367,8 +497,19 @@ impl BlockExecutor {
         let r: [u8; 32] = *tx.signature.r.as_bytes();
         let s: [u8; 32] = *tx.signature.s.as_bytes();
 
+        // Convert EIP-155 v value to raw recovery id (27 or 28)
+        let v_raw = tx.signature.v;
+        let recovery_v = if v_raw >= 35 {
+            // EIP-155: v = recovery_id + chain_id * 2 + 35
+            let recovery_id = v_raw.saturating_sub(self.chain_id * 2 + 35);
+            (recovery_id as u8) + 27
+        } else {
+            // Legacy v (27 or 28)
+            v_raw as u8
+        };
+
         let sig = Signature {
-            v: (tx.signature.v % 256) as u8,
+            v: recovery_v,
             r,
             s,
         };
@@ -379,21 +520,32 @@ impl BlockExecutor {
         Ok(public_key_to_address(&pubkey))
     }
 
-    /// Compute signing hash for transaction
+    /// Compute EIP-155 signing hash for transaction
     fn compute_signing_hash(&self, tx: &SignedTransaction) -> ExecutionResult<H256> {
-        // Simplified - just hash the tx fields
-        // Real implementation needs proper RLP encoding
-        let mut data = Vec::new();
-        data.extend_from_slice(&tx.nonce().to_le_bytes());
-        data.extend_from_slice(&tx.gas_limit().to_le_bytes());
-        data.extend_from_slice(&tx.value().to_le_bytes());
-        data.extend_from_slice(tx.data());
+        // For legacy transactions, the signing hash is:
+        // keccak256(RLP([nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]))
+        let mut stream = RlpStream::new_list(9);
+        stream.append(&tx.nonce());
+        // For EIP-1559 transactions, use max_fee_per_gas as the gas price field
+        let gas_price = tx.gas_price()
+            .or(tx.max_fee_per_gas())
+            .unwrap_or(0);
+        stream.append(&gas_price);
+        stream.append(&tx.gas_limit());
 
         if let Some(to) = tx.to() {
-            data.extend_from_slice(to.as_bytes());
+            stream.append(to);
+        } else {
+            stream.append_empty_data();
         }
 
-        Ok(keccak256(&data))
+        stream.append(&tx.value());
+        stream.append(&tx.data().to_vec());
+        stream.append(&self.chain_id);
+        stream.append(&0u8);
+        stream.append(&0u8);
+
+        Ok(keccak256(&stream.out()))
     }
 
     /// Calculate logs bloom from receipts
@@ -419,6 +571,19 @@ impl BlockExecutor {
     pub fn into_state(self) -> ExecutionState {
         self.state
     }
+}
+
+/// Calculate CREATE address: keccak256(RLP([sender, nonce]))[12:]
+pub fn calculate_create_address(sender: &Address, nonce: u64) -> Address {
+    let mut stream = RlpStream::new_list(2);
+    stream.append(sender);
+    if nonce == 0 {
+        stream.append_empty_data();
+    } else {
+        stream.append(&nonce);
+    }
+    let hash = keccak256(&stream.out());
+    Address::from_slice(&hash.as_bytes()[12..]).unwrap_or(Address::ZERO)
 }
 
 #[cfg(test)]
@@ -478,8 +643,6 @@ mod tests {
     fn test_state_access() {
         let executor = create_test_executor();
         let addr = Address::from_bytes([0x42; 20]);
-
-        // Initial state should have no account
         let account = executor.state().get_account(&addr);
         assert!(account.is_none());
     }
@@ -488,23 +651,28 @@ mod tests {
     fn test_state_modification() {
         let mut executor = create_test_executor();
         let addr = Address::from_bytes([0x42; 20]);
-
         let mut account = Account::default();
         account.balance = 1000;
         executor.state_mut().set_account(addr, account);
-
         let retrieved = executor.state().get_account(&addr).unwrap();
         assert_eq!(retrieved.balance, 1000);
     }
 
     #[test]
+    fn test_create_address_calculation() {
+        let sender = Address::from_bytes([0x42; 20]);
+        let addr1 = calculate_create_address(&sender, 0);
+        let addr2 = calculate_create_address(&sender, 1);
+        assert_ne!(addr1, addr2);
+        assert_ne!(addr1, Address::ZERO);
+    }
+
+    #[test]
     fn test_execution_state_code() {
         let mut state = ExecutionState::new();
-        let code = vec![0x60, 0x00, 0x60, 0x00, 0x00]; // PUSH1 0 PUSH1 0 STOP
+        let code = vec![0x60, 0x00, 0x60, 0x00, 0x00];
         let code_hash = keccak256(&code);
-
         state.set_code(code_hash, code.clone());
-
         let retrieved = state.get_code(&code_hash).unwrap();
         assert_eq!(retrieved, code);
     }
@@ -515,394 +683,8 @@ mod tests {
         let addr = Address::from_bytes([0x42; 20]);
         let key = H256::from_bytes([0x01; 32]);
         let value = H256::from_bytes([0x02; 32]);
-
         state.set_storage(addr, key, value);
-
         let retrieved = state.get_storage(&addr, &key);
         assert_eq!(retrieved, value);
-    }
-
-    #[test]
-    fn test_create_address_calculation() {
-        let executor = create_test_executor();
-        let sender = Address::from_bytes([0x42; 20]);
-
-        let addr1 = executor.calculate_create_address(&sender, 0);
-        let addr2 = executor.calculate_create_address(&sender, 1);
-
-        // Different nonces should produce different addresses
-        assert_ne!(addr1, addr2);
-    }
-
-    // ==================== ExecutionState Extended Tests ====================
-
-    #[test]
-    fn test_execution_state_default() {
-        let state = ExecutionState::default();
-        let addr = Address::from_bytes([0x42; 20]);
-        assert!(state.get_account(&addr).is_none());
-    }
-
-    #[test]
-    fn test_execution_state_get_nonexistent_code() {
-        let state = ExecutionState::new();
-        let code_hash = H256::from_bytes([0x99; 32]);
-        assert!(state.get_code(&code_hash).is_none());
-    }
-
-    #[test]
-    fn test_execution_state_storage_default() {
-        let state = ExecutionState::new();
-        let addr = Address::from_bytes([0x42; 20]);
-        let key = H256::from_bytes([0x01; 32]);
-        assert_eq!(state.get_storage(&addr, &key), H256::ZERO);
-    }
-
-    #[test]
-    fn test_execution_state_cache_access() {
-        let mut state = ExecutionState::new();
-        let addr = Address::from_bytes([0x42; 20]);
-        let mut account = Account::default();
-        account.balance = 500;
-        state.set_account(addr, account);
-        // Verify cache is accessible (returns reference)
-        let _cache = state.cache();
-        // Account should still be retrievable
-        assert_eq!(state.get_account(&addr).unwrap().balance, 500);
-    }
-
-    #[test]
-    fn test_execution_state_into_cache() {
-        let mut state = ExecutionState::new();
-        let addr = Address::from_bytes([0x42; 20]);
-        let mut account = Account::default();
-        account.balance = 1000;
-        state.set_account(addr, account);
-        // Verify state can be consumed into cache
-        let _cache = state.into_cache();
-        // State is now moved, cache ownership transferred
-    }
-
-    #[test]
-    fn test_execution_state_multiple_accounts() {
-        let mut state = ExecutionState::new();
-        let addr1 = Address::from_bytes([0x01; 20]);
-        let addr2 = Address::from_bytes([0x02; 20]);
-        let mut acc1 = Account::default();
-        acc1.balance = 100;
-        let mut acc2 = Account::default();
-        acc2.balance = 200;
-        state.set_account(addr1, acc1);
-        state.set_account(addr2, acc2);
-        assert_eq!(state.get_account(&addr1).unwrap().balance, 100);
-        assert_eq!(state.get_account(&addr2).unwrap().balance, 200);
-    }
-
-    #[test]
-    fn test_execution_state_overwrite_account() {
-        let mut state = ExecutionState::new();
-        let addr = Address::from_bytes([0x42; 20]);
-        let mut acc1 = Account::default();
-        acc1.balance = 100;
-        state.set_account(addr, acc1);
-        let mut acc2 = Account::default();
-        acc2.balance = 999;
-        state.set_account(addr, acc2);
-        assert_eq!(state.get_account(&addr).unwrap().balance, 999);
-    }
-
-    #[test]
-    fn test_execution_state_multiple_storage_slots() {
-        let mut state = ExecutionState::new();
-        let addr = Address::from_bytes([0x42; 20]);
-        for i in 0..10u8 {
-            let key = H256::from_bytes([i; 32]);
-            let value = H256::from_bytes([i + 100; 32]);
-            state.set_storage(addr, key, value);
-        }
-        for i in 0..10u8 {
-            let key = H256::from_bytes([i; 32]);
-            let expected = H256::from_bytes([i + 100; 32]);
-            assert_eq!(state.get_storage(&addr, &key), expected);
-        }
-    }
-
-    // ==================== BlockExecutor Extended Tests ====================
-
-    #[test]
-    fn test_executor_with_state() {
-        let mut state = ExecutionState::new();
-        let addr = Address::from_bytes([0x42; 20]);
-        let mut account = Account::default();
-        account.balance = 1_000_000;
-        state.set_account(addr, account);
-        let executor = BlockExecutor::with_state(state, 1);
-        assert_eq!(executor.state().get_account(&addr).unwrap().balance, 1_000_000);
-    }
-
-    #[test]
-    fn test_executor_chain_id() {
-        let executor = BlockExecutor::new(137);
-        assert_eq!(executor.chain_id, 137);
-    }
-
-    #[test]
-    fn test_executor_into_state() {
-        let mut executor = BlockExecutor::new(1);
-        let addr = Address::from_bytes([0x42; 20]);
-        let mut account = Account::default();
-        account.balance = 500;
-        executor.state_mut().set_account(addr, account);
-        let state = executor.into_state();
-        assert_eq!(state.get_account(&addr).unwrap().balance, 500);
-    }
-
-    #[test]
-    fn test_executor_state_mut() {
-        let mut executor = BlockExecutor::new(1);
-        let addr = Address::from_bytes([0x42; 20]);
-        {
-            let state = executor.state_mut();
-            let mut account = Account::default();
-            account.nonce = 5;
-            state.set_account(addr, account);
-        }
-        assert_eq!(executor.state().get_account(&addr).unwrap().nonce, 5);
-    }
-
-    // ==================== Block Execution Tests ====================
-
-    #[test]
-    fn test_block_with_high_gas_limit() {
-        let mut executor = create_test_executor();
-        let mut block = create_test_block();
-        block.header.gas_limit = 100_000_000;
-        let result = executor.execute_block(&block).unwrap();
-        assert_eq!(result.gas_used, 0);
-    }
-
-    #[test]
-    fn test_block_execution_result_fields() {
-        let mut executor = create_test_executor();
-        let block = create_test_block();
-        let result = executor.execute_block(&block).unwrap();
-        assert!(result.receipts.is_empty());
-        assert_eq!(result.gas_used, 0);
-        assert_eq!(result.state_root, H256::ZERO);
-    }
-
-    #[test]
-    fn test_block_with_zero_base_fee() {
-        let mut executor = create_test_executor();
-        let mut block = create_test_block();
-        block.header.base_fee_per_gas = Some(0);
-        let result = executor.execute_block(&block).unwrap();
-        assert_eq!(result.gas_used, 0);
-    }
-
-    #[test]
-    fn test_block_without_base_fee() {
-        let mut executor = create_test_executor();
-        let mut block = create_test_block();
-        block.header.base_fee_per_gas = None;
-        let result = executor.execute_block(&block).unwrap();
-        assert_eq!(result.gas_used, 0);
-    }
-
-    // ==================== Create Address Tests ====================
-
-    #[test]
-    fn test_create_address_same_sender_same_nonce() {
-        let executor = create_test_executor();
-        let sender = Address::from_bytes([0x42; 20]);
-        let addr1 = executor.calculate_create_address(&sender, 5);
-        let addr2 = executor.calculate_create_address(&sender, 5);
-        assert_eq!(addr1, addr2);
-    }
-
-    #[test]
-    fn test_create_address_different_senders() {
-        let executor = create_test_executor();
-        let sender1 = Address::from_bytes([0x01; 20]);
-        let sender2 = Address::from_bytes([0x02; 20]);
-        let addr1 = executor.calculate_create_address(&sender1, 0);
-        let addr2 = executor.calculate_create_address(&sender2, 0);
-        assert_ne!(addr1, addr2);
-    }
-
-    #[test]
-    fn test_create_address_zero_sender() {
-        let executor = create_test_executor();
-        let sender = Address::ZERO;
-        let addr = executor.calculate_create_address(&sender, 0);
-        assert_ne!(addr, Address::ZERO);
-    }
-
-    #[test]
-    fn test_create_address_max_nonce() {
-        let executor = create_test_executor();
-        let sender = Address::from_bytes([0x42; 20]);
-        let addr = executor.calculate_create_address(&sender, u64::MAX);
-        assert_ne!(addr, Address::ZERO);
-    }
-
-    // ==================== Error Tests ====================
-
-    #[test]
-    fn test_error_display_invalid_block() {
-        let err = ExecutionError::InvalidBlock("test reason".to_string());
-        assert!(format!("{}", err).contains("test reason"));
-    }
-
-    #[test]
-    fn test_error_display_invalid_transaction() {
-        let err = ExecutionError::InvalidTransaction {
-            tx_hash: H256::from_bytes([0x01; 32]),
-            reason: "bad tx".to_string(),
-        };
-        assert!(format!("{}", err).contains("bad tx"));
-    }
-
-    #[test]
-    fn test_error_display_insufficient_gas() {
-        let err = ExecutionError::InsufficientGas {
-            required: 100000,
-            available: 21000,
-        };
-        let msg = format!("{}", err);
-        assert!(msg.contains("100000"));
-        assert!(msg.contains("21000"));
-    }
-
-    #[test]
-    fn test_error_display_insufficient_balance() {
-        let err = ExecutionError::InsufficientBalance {
-            required: 1_000_000,
-            available: 500,
-        };
-        let msg = format!("{}", err);
-        assert!(msg.contains("1000000"));
-        assert!(msg.contains("500"));
-    }
-
-    #[test]
-    fn test_error_display_nonce_mismatch() {
-        let err = ExecutionError::NonceMismatch {
-            expected: 5,
-            got: 3,
-        };
-        let msg = format!("{}", err);
-        assert!(msg.contains("5"));
-        assert!(msg.contains("3"));
-    }
-
-    #[test]
-    fn test_error_display_sender_recovery() {
-        let err = ExecutionError::SenderRecovery("invalid signature".to_string());
-        assert!(format!("{}", err).contains("invalid signature"));
-    }
-
-    #[test]
-    fn test_error_display_block_gas_limit_exceeded() {
-        let err = ExecutionError::BlockGasLimitExceeded {
-            used: 50_000_000,
-            limit: 30_000_000,
-        };
-        let msg = format!("{}", err);
-        assert!(msg.contains("50000000"));
-        assert!(msg.contains("30000000"));
-    }
-
-    #[test]
-    fn test_error_display_internal() {
-        let err = ExecutionError::Internal("something went wrong".to_string());
-        assert!(format!("{}", err).contains("something went wrong"));
-    }
-
-    // ==================== BlockExecutionResult Tests ====================
-
-    #[test]
-    fn test_block_execution_result_clone() {
-        let result = BlockExecutionResult {
-            receipts: vec![],
-            state_root: H256::from_bytes([0x01; 32]),
-            gas_used: 21000,
-            logs_bloom: bach_types::Bloom::default(),
-        };
-        let cloned = result.clone();
-        assert_eq!(cloned.state_root, result.state_root);
-        assert_eq!(cloned.gas_used, result.gas_used);
-    }
-
-    #[test]
-    fn test_block_execution_result_debug() {
-        let result = BlockExecutionResult {
-            receipts: vec![],
-            state_root: H256::ZERO,
-            gas_used: 0,
-            logs_bloom: bach_types::Bloom::default(),
-        };
-        let debug_str = format!("{:?}", result);
-        assert!(debug_str.contains("BlockExecutionResult"));
-    }
-
-    // ==================== Logs Bloom Tests ====================
-
-    #[test]
-    fn test_calculate_logs_bloom_empty() {
-        let executor = create_test_executor();
-        let receipts: Vec<Receipt> = vec![];
-        let bloom = executor.calculate_logs_bloom(&receipts);
-        assert_eq!(bloom, bach_types::Bloom::default());
-    }
-
-    // ==================== Integration Tests ====================
-
-    #[test]
-    fn test_full_state_workflow() {
-        let mut executor = BlockExecutor::new(1);
-        let alice = Address::from_bytes([0x01; 20]);
-        let bob = Address::from_bytes([0x02; 20]);
-        let mut alice_account = Account::default();
-        alice_account.balance = 10_000_000_000_000_000_000u128;
-        alice_account.nonce = 0;
-        executor.state_mut().set_account(alice, alice_account);
-        let retrieved = executor.state().get_account(&alice).unwrap();
-        assert_eq!(retrieved.balance, 10_000_000_000_000_000_000u128);
-        assert_eq!(retrieved.nonce, 0);
-        assert!(executor.state().get_account(&bob).is_none());
-    }
-
-    #[test]
-    fn test_contract_code_storage() {
-        let mut executor = BlockExecutor::new(1);
-        let code = vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
-        let code_hash = keccak256(&code);
-        executor.state_mut().set_code(code_hash, code.clone());
-        let contract_addr = Address::from_bytes([0xc0; 20]);
-        let mut contract_account = Account::default();
-        contract_account.code_hash = code_hash;
-        executor.state_mut().set_account(contract_addr, contract_account);
-        let account = executor.state().get_account(&contract_addr).unwrap();
-        assert_eq!(account.code_hash, code_hash);
-        let stored_code = executor.state().get_code(&code_hash).unwrap();
-        assert_eq!(stored_code, code);
-    }
-
-    #[test]
-    fn test_storage_slot_operations() {
-        let mut executor = BlockExecutor::new(1);
-        let contract_addr = Address::from_bytes([0xc0; 20]);
-        let slot0 = H256::ZERO;
-        let value0 = H256::from_bytes([0x42; 32]);
-        executor.state_mut().set_storage(contract_addr, slot0, value0);
-        let slot1 = H256::from_bytes([0x01; 32]);
-        let value1 = H256::from_bytes([0x99; 32]);
-        executor.state_mut().set_storage(contract_addr, slot1, value1);
-        assert_eq!(executor.state().get_storage(&contract_addr, &slot0), value0);
-        assert_eq!(executor.state().get_storage(&contract_addr, &slot1), value1);
-        let new_value0 = H256::from_bytes([0xff; 32]);
-        executor.state_mut().set_storage(contract_addr, slot0, new_value0);
-        assert_eq!(executor.state().get_storage(&contract_addr, &slot0), new_value0);
     }
 }

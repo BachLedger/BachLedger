@@ -10,6 +10,7 @@ description = "End-to-end integration tests for BachLedger"
 bach-primitives.workspace = true
 bach-types.workspace = true
 bach-crypto.workspace = true
+bach-rlp.workspace = true
 bach-storage.workspace = true
 bach-evm.workspace = true
 bach-scheduler.workspace = true

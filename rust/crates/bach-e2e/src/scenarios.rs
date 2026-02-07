@@ -6,7 +6,84 @@
 #[cfg(test)]
 mod tests {
     use crate::harness::{ReceiptAssertions, TestAccount, TestHarness, FUNDED_BALANCE};
+    use bach_crypto::keccak256;
     use bach_primitives::{Address, H256};
+
+    // ============================================================================
+    // ABI Encoding Helpers for Solidity Contract Testing
+    // ============================================================================
+
+    /// Compute 4-byte function selector from signature string
+    fn selector(sig: &str) -> [u8; 4] {
+        let hash = keccak256(sig.as_bytes());
+        let mut sel = [0u8; 4];
+        sel.copy_from_slice(&hash.as_bytes()[..4]);
+        sel
+    }
+
+    /// Encode address as 32-byte ABI parameter (left-padded with zeros)
+    fn abi_encode_address(addr: &Address) -> [u8; 32] {
+        let mut encoded = [0u8; 32];
+        encoded[12..].copy_from_slice(addr.as_bytes());
+        encoded
+    }
+
+    /// Encode u128 as 32-byte ABI parameter (big-endian, left-padded)
+    fn abi_encode_u128(value: u128) -> [u8; 32] {
+        let mut encoded = [0u8; 32];
+        encoded[16..].copy_from_slice(&value.to_be_bytes());
+        encoded
+    }
+
+    /// Decode u128 from 32-byte ABI return value
+    fn abi_decode_u128(data: &[u8]) -> u128 {
+        if data.len() < 32 { return 0; }
+        let mut bytes = [0u8; 16];
+        bytes.copy_from_slice(&data[16..32]);
+        u128::from_be_bytes(bytes)
+    }
+
+    /// Build `mint(address,uint256)` calldata
+    fn encode_mint(to: &Address, amount: u128) -> Vec<u8> {
+        let mut data = Vec::with_capacity(68);
+        data.extend_from_slice(&selector("mint(address,uint256)"));
+        data.extend_from_slice(&abi_encode_address(to));
+        data.extend_from_slice(&abi_encode_u128(amount));
+        data
+    }
+
+    /// Build `balanceOf(address)` calldata
+    fn encode_balance_of(account: &Address) -> Vec<u8> {
+        let mut data = Vec::with_capacity(36);
+        data.extend_from_slice(&selector("balanceOf(address)"));
+        data.extend_from_slice(&abi_encode_address(account));
+        data
+    }
+
+    /// Build `transfer(address,uint256)` calldata
+    fn encode_transfer(to: &Address, amount: u128) -> Vec<u8> {
+        let mut data = Vec::with_capacity(68);
+        data.extend_from_slice(&selector("transfer(address,uint256)"));
+        data.extend_from_slice(&abi_encode_address(to));
+        data.extend_from_slice(&abi_encode_u128(amount));
+        data
+    }
+
+    /// Build `totalSupply()` calldata
+    fn encode_total_supply() -> Vec<u8> {
+        selector("totalSupply()").to_vec()
+    }
+
+    /// Build `decimals()` calldata
+    fn encode_decimals() -> Vec<u8> {
+        selector("decimals()").to_vec()
+    }
+
+    /// Load compiled AssetToken bytecode (init code for deployment)
+    fn asset_token_bytecode() -> Vec<u8> {
+        let hex_str = include_str!("../../../contracts/bytecode/AssetToken.bin");
+        hex::decode(hex_str.trim()).expect("AssetToken.bin should be valid hex")
+    }
 
     // ============================================================================
     // Value Transfer Tests
@@ -559,5 +636,174 @@ mod tests {
             alice.address().to_hex(),
             "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
         );
+    }
+
+    // ============================================================================
+    // AssetToken (Real Solidity Contract) Tests
+    // ============================================================================
+
+    #[test]
+    fn test_asset_token_deploy() {
+        let mut harness = TestHarness::new();
+        let mut deployer = harness.create_account();
+
+        let bytecode = asset_token_bytecode();
+        assert!(bytecode.len() > 100, "AssetToken bytecode should be substantial");
+
+        let (receipt, contract_addr) = harness
+            .deploy_contract(&mut deployer, bytecode)
+            .expect("AssetToken deployment should succeed");
+
+        receipt.assert_success();
+        let contract_addr = contract_addr.expect("Should return contract address");
+
+        // Verify contract has code stored
+        let code = harness.code(&contract_addr);
+        assert!(code.is_some(), "Contract should have runtime code");
+        assert!(code.unwrap().len() > 50, "Runtime code should be substantial");
+    }
+
+    #[test]
+    fn test_asset_token_mint_and_balance() {
+        let mut harness = TestHarness::new();
+        let mut deployer = harness.create_account();
+
+        // Deploy
+        let bytecode = asset_token_bytecode();
+        let (receipt, contract_addr) = harness
+            .deploy_contract(&mut deployer, bytecode)
+            .expect("Deploy should succeed");
+        receipt.assert_success();
+        let contract = contract_addr.expect("Should have contract address");
+
+        // Check initial balanceOf is 0
+        let balance_data = encode_balance_of(&deployer.address());
+        let receipt = harness.call(&mut deployer, contract, balance_data)
+            .expect("balanceOf call should succeed");
+        receipt.assert_success();
+
+        // Mint 1000 tokens (1000 * 10^18)
+        let mint_amount: u128 = 1000 * 1_000_000_000_000_000_000;
+        let mint_data = encode_mint(&deployer.address(), mint_amount);
+        let receipt = harness.call(&mut deployer, contract, mint_data)
+            .expect("mint should succeed");
+        receipt.assert_success();
+        // Mint should emit events (Mint + Transfer)
+        assert!(receipt.logs.len() >= 1, "Mint should emit at least one event");
+
+        // Verify totalSupply = 1000 tokens
+        let supply_data = encode_total_supply();
+        let receipt = harness.call(&mut deployer, contract, supply_data)
+            .expect("totalSupply call should succeed");
+        receipt.assert_success();
+    }
+
+    #[test]
+    fn test_asset_token_transfer() {
+        let mut harness = TestHarness::new();
+        let mut deployer = harness.create_account();
+        let bob = harness.create_account();
+
+        // Deploy
+        let bytecode = asset_token_bytecode();
+        let (receipt, contract_addr) = harness
+            .deploy_contract(&mut deployer, bytecode)
+            .expect("Deploy should succeed");
+        receipt.assert_success();
+        let contract = contract_addr.expect("Should have contract address");
+
+        // Mint 1000 tokens to deployer
+        let mint_amount: u128 = 1000 * 1_000_000_000_000_000_000;
+        let mint_data = encode_mint(&deployer.address(), mint_amount);
+        let receipt = harness.call(&mut deployer, contract, mint_data)
+            .expect("mint should succeed");
+        receipt.assert_success();
+
+        // Transfer 100 tokens to bob
+        let transfer_amount: u128 = 100 * 1_000_000_000_000_000_000;
+        let transfer_data = encode_transfer(&bob.address(), transfer_amount);
+        let receipt = harness.call(&mut deployer, contract, transfer_data)
+            .expect("transfer should succeed");
+        receipt.assert_success();
+        // Transfer should emit Transfer event
+        assert!(receipt.logs.len() >= 1, "Transfer should emit event");
+    }
+
+    #[test]
+    fn test_asset_token_decimals() {
+        let mut harness = TestHarness::new();
+        let mut deployer = harness.create_account();
+
+        // Deploy
+        let bytecode = asset_token_bytecode();
+        let (receipt, contract_addr) = harness
+            .deploy_contract(&mut deployer, bytecode)
+            .expect("Deploy should succeed");
+        receipt.assert_success();
+        let contract = contract_addr.expect("Should have contract address");
+
+        // Verify contract has code
+        let code = harness.code(&contract);
+        assert!(code.is_some(), "Contract should have runtime code");
+
+        // Call decimals()
+        let decimals_data = encode_decimals();
+        let receipt = harness.call(&mut deployer, contract, decimals_data)
+            .expect("decimals call should succeed");
+        receipt.assert_success();
+    }
+
+    #[test]
+    fn test_asset_token_full_lifecycle() {
+        let mut harness = TestHarness::new();
+        let mut alice = harness.create_account();
+        let bob = harness.create_account();
+
+        // 1. Deploy AssetToken
+        let bytecode = asset_token_bytecode();
+        let (receipt, contract_addr) = harness
+            .deploy_contract(&mut alice, bytecode)
+            .expect("Deploy should succeed");
+        receipt.assert_success();
+        let contract = contract_addr.expect("Should have contract address");
+
+        // 2. Mint 1000 tokens to alice
+        let alice_addr = alice.address();
+        let bob_addr = bob.address();
+        let mint_amount: u128 = 1000 * 1_000_000_000_000_000_000;
+        let mint_data = encode_mint(&alice_addr, mint_amount);
+        let receipt = harness.call(&mut alice, contract, mint_data)
+            .expect("mint to alice should succeed");
+        receipt.assert_success();
+
+        // 3. Mint 500 tokens to bob (permissionless - anyone can mint)
+        let bob_mint: u128 = 500 * 1_000_000_000_000_000_000;
+        let mint_bob_data = encode_mint(&bob_addr, bob_mint);
+        let receipt = harness.call(&mut alice, contract, mint_bob_data)
+            .expect("mint to bob should succeed");
+        receipt.assert_success();
+
+        // 4. Transfer 200 tokens from alice to bob
+        let transfer_amount: u128 = 200 * 1_000_000_000_000_000_000;
+        let transfer_data = encode_transfer(&bob_addr, transfer_amount);
+        let receipt = harness.call(&mut alice, contract, transfer_data)
+            .expect("transfer should succeed");
+        receipt.assert_success();
+
+        // 5. Call totalSupply - should be 1500 tokens
+        let receipt = harness.call(&mut alice, contract, encode_total_supply())
+            .expect("totalSupply should succeed");
+        receipt.assert_success();
+
+        // 6. Call balanceOf for alice and bob
+        let bal_alice_data = encode_balance_of(&alice_addr);
+        let receipt = harness.call(&mut alice, contract, bal_alice_data)
+            .expect("balanceOf alice should succeed");
+        receipt.assert_success();
+
+        let bal_bob_data = encode_balance_of(&bob_addr);
+        let receipt = harness.call(&mut alice, contract, bal_bob_data)
+            .expect("balanceOf bob should succeed");
+        receipt.assert_success();
     }
 }

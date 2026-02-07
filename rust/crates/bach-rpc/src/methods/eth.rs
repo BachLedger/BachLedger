@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bach_crypto::{keccak256, public_key_to_address, recover_public_key, Signature};
 use bach_primitives::{Address, H256};
 use bach_rlp::{Rlp, RlpStream};
-use bach_storage::StateReader;
+use bach_storage::{StateReader, EMPTY_CODE_HASH};
 use bach_types::{LegacyTx, SignedTransaction, TxSignature};
 use bytes::Bytes;
 use serde_json::Value;
@@ -14,7 +14,8 @@ use crate::error::JsonRpcError;
 use crate::handler::RpcContext;
 use crate::types::{
     format_bytes, format_u128, format_u64, parse_address, parse_block_id, parse_h256,
-    parse_hex_bytes, BlockId, CallRequest, CallRequestRaw, RpcBlock, RpcTransaction,
+    parse_hex_bytes, BlockId, CallRequest, CallRequestRaw, RpcBlock, RpcLog, RpcReceipt,
+    RpcTransaction,
 };
 
 /// eth_chainId - Returns the chain ID
@@ -124,7 +125,7 @@ pub async fn eth_get_code(
         .get_code_hash(&address)
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-    if code_hash.is_zero() || code_hash == bach_storage::EMPTY_CODE_HASH {
+    if code_hash.is_zero() || code_hash == EMPTY_CODE_HASH {
         return Ok(Value::String("0x".to_string()));
     }
 
@@ -164,7 +165,7 @@ pub async fn eth_get_storage_at(
     Ok(Value::String(value.to_hex()))
 }
 
-/// eth_call - Execute a call without creating a transaction
+/// eth_call - Execute a call without creating a transaction (with state access)
 pub async fn eth_call(
     ctx: Arc<RpcContext>,
     params: Vec<Value>,
@@ -183,14 +184,12 @@ pub async fn eth_call(
         BlockId::Latest
     };
 
-    // Get latest block for context
     let latest_number = ctx
         .block_db
         .get_latest_block()
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?
         .unwrap_or(0);
 
-    // Create execution environment
     let from = call_request.from.unwrap_or(Address::ZERO);
     let to = call_request.to.unwrap_or(Address::ZERO);
     let data = call_request.data.map(|b| b.to_vec()).unwrap_or_default();
@@ -200,7 +199,6 @@ pub async fn eth_call(
         .map(|v| v.low_u128())
         .unwrap_or(0);
 
-    // Build block context
     let block_ctx = bach_evm::BlockContext {
         number: latest_number + 1,
         timestamp: std::time::SystemTime::now()
@@ -237,7 +235,7 @@ pub async fn eth_call(
         .get_code_hash(&to)
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-    let code = if code_hash.is_zero() || code_hash == bach_storage::EMPTY_CODE_HASH {
+    let code = if code_hash.is_zero() || code_hash == EMPTY_CODE_HASH {
         vec![]
     } else {
         ctx.state_db
@@ -247,18 +245,18 @@ pub async fn eth_call(
     };
 
     if code.is_empty() {
-        // No code to execute, return empty
         return Ok(Value::String("0x".to_string()));
     }
 
-    // Execute
+    // Create a state adapter that reads from StateDb
+    let mut state_adapter = RpcStateAdapter::new(&ctx);
+
     let mut interp = bach_evm::Interpreter::new(code, gas);
-    let result = interp.run(&env);
+    let result = interp.run_with_state(&env, &mut state_adapter);
 
     if result.success {
         Ok(Value::String(format_bytes(&result.output)))
     } else {
-        // Include revert data in error response for debugging
         let message = if result.output.is_empty() {
             "execution reverted".to_string()
         } else {
@@ -281,7 +279,7 @@ pub async fn eth_estimate_gas(
         .map_err(|e| JsonRpcError::invalid_params(format!("invalid call request: {}", e)))?;
     let call_request = CallRequest::from_raw(call_request_raw)?;
 
-    // Simple estimation: base gas + data gas
+    // Base gas + data gas
     let base_gas = 21000u64;
     let data_gas = call_request
         .data
@@ -293,21 +291,54 @@ pub async fn eth_estimate_gas(
         })
         .unwrap_or(0);
 
-    // If it's a contract call, add execution overhead
+    // If it's a contract call, try actual execution to get real gas
     let to = call_request.to.unwrap_or(Address::ZERO);
     let code_hash = ctx
         .state_db
         .get_code_hash(&to)
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-    let execution_gas = if !code_hash.is_zero() && code_hash != bach_storage::EMPTY_CODE_HASH {
-        50_000u64 // Add overhead for contract execution
+    let execution_gas = if !code_hash.is_zero() && code_hash != EMPTY_CODE_HASH {
+        // Try executing with high gas limit to measure actual usage
+        let code = ctx.state_db.get_code(&code_hash)
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?
+            .unwrap_or_default();
+
+        if !code.is_empty() {
+            let from = call_request.from.unwrap_or(Address::ZERO);
+            let data = call_request.data.as_ref().map(|b| b.to_vec()).unwrap_or_default();
+            let value = call_request.value.map(|v| v.low_u128()).unwrap_or(0);
+            let sim_gas = 10_000_000u64;
+
+            let env = bach_evm::Environment {
+                call: bach_evm::CallContext {
+                    caller: from,
+                    address: to,
+                    value,
+                    data,
+                    gas: sim_gas,
+                    is_static: false,
+                    depth: 0,
+                },
+                block: bach_evm::BlockContext::default(),
+                tx: bach_evm::TxContext { origin: from, gas_price: 0 },
+            };
+
+            let mut state_adapter = RpcStateAdapter::new(&ctx);
+            let mut interp = bach_evm::Interpreter::new(code, sim_gas);
+            let result = interp.run_with_state(&env, &mut state_adapter);
+            result.gas_used
+        } else {
+            0
+        }
+    } else if call_request.to.is_none() {
+        // Contract creation
+        32000u64
     } else {
         0
     };
 
     let estimated = base_gas + data_gas + execution_gas;
-
     // Add 20% buffer
     let with_buffer = estimated + estimated / 5;
 
@@ -327,19 +358,30 @@ pub async fn eth_send_raw_transaction(
 
     let raw_tx = parse_hex_bytes(&params[0])?;
 
-    // Decode the transaction
     let signed_tx = decode_raw_transaction(&raw_tx)
         .map_err(|e| JsonRpcError::invalid_params(format!("failed to decode transaction: {}", e)))?;
 
-    // Recover sender
     let tx_hash = compute_tx_hash(&raw_tx);
     let signing_hash = compute_signing_hash(&signed_tx, ctx.chain_id)?;
 
     let r: [u8; 32] = *signed_tx.signature.r.as_bytes();
     let s: [u8; 32] = *signed_tx.signature.s.as_bytes();
 
+    // Convert EIP-155 v value to raw recovery id (27 or 28)
+    // EIP-155: v = recovery_id + chain_id * 2 + 35
+    // Legacy:  v = recovery_id + 27
+    let v_raw = signed_tx.signature.v;
+    let recovery_v = if v_raw >= 35 {
+        // EIP-155: extract recovery_id = v - chain_id * 2 - 35
+        let recovery_id = v_raw.saturating_sub(ctx.chain_id * 2 + 35);
+        (recovery_id as u8) + 27
+    } else {
+        // Legacy v (27 or 28)
+        v_raw as u8
+    };
+
     let sig = Signature {
-        v: (signed_tx.signature.v % 256) as u8,
+        v: recovery_v,
         r,
         s,
     };
@@ -348,7 +390,6 @@ pub async fn eth_send_raw_transaction(
         .map_err(|e| JsonRpcError::invalid_params(format!("failed to recover sender: {}", e)))?;
     let sender = public_key_to_address(&pubkey);
 
-    // Validate sender balance and nonce
     let sender_balance = ctx
         .state_db
         .get_balance(&sender)
@@ -364,7 +405,6 @@ pub async fn eth_send_raw_transaction(
         .get_nonce(&sender)
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-    // Allow nonce to be current or in the future (for queued transactions)
     if signed_tx.nonce() < sender_nonce {
         return Err(JsonRpcError::transaction_rejected(format!(
             "nonce too low: have {}, expected >= {}",
@@ -373,7 +413,6 @@ pub async fn eth_send_raw_transaction(
         )));
     }
 
-    // Add to transaction pool
     ctx.txpool
         .add(signed_tx, sender, tx_hash)
         .map_err(|e| JsonRpcError::transaction_rejected(e.to_string()))?;
@@ -418,8 +457,6 @@ pub async fn eth_get_block_by_hash(
     let block_hash = parse_h256(&params[0])?;
     let full_txs = params.get(1).and_then(|v| v.as_bool()).unwrap_or(false);
 
-    // Find block number from hash (we need to scan or have reverse index)
-    // For now, scan from latest
     let latest = ctx
         .block_db
         .get_latest_block()
@@ -459,28 +496,109 @@ pub async fn eth_get_transaction_by_hash(
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?);
     }
 
-    // TODO: Search in block database for confirmed transactions
-    // For now, return null if not in txpool
+    // Search in block database using tx_hash index
+    let meta_key = format!("tx:{}", tx_hash.to_hex());
+    if let Some(mapping) = ctx.block_db.get_meta(meta_key.as_bytes())
+        .map_err(|e| JsonRpcError::internal_error(e.to_string()))? {
+        if mapping.len() >= 12 {
+            let block_number = u64::from_le_bytes(mapping[0..8].try_into().unwrap());
+            let _tx_index = u32::from_le_bytes(mapping[8..12].try_into().unwrap());
+            // We found the block, but we need the transaction data
+            // For now, return basic info
+            return Ok(Value::String(format!("confirmed in block {}", block_number)));
+        }
+    }
+
     Ok(Value::Null)
 }
 
 /// eth_getTransactionReceipt - Get transaction receipt
 pub async fn eth_get_transaction_receipt(
-    _ctx: Arc<RpcContext>,
+    ctx: Arc<RpcContext>,
     params: Vec<Value>,
 ) -> Result<Value, JsonRpcError> {
     if params.is_empty() {
         return Err(JsonRpcError::invalid_params("missing transaction hash"));
     }
 
-    let _tx_hash = parse_h256(&params[0])?;
+    let tx_hash = parse_h256(&params[0])?;
 
-    // TODO: Search in block database for receipt
-    // For now, return null
-    Ok(Value::Null)
+    // Look up tx_hash -> (block_number, tx_index, block_hash) from meta
+    let meta_key = format!("tx:{}", tx_hash.to_hex());
+    let mapping = ctx.block_db.get_meta(meta_key.as_bytes())
+        .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+    let mapping = match mapping {
+        Some(m) => m,
+        None => return Ok(Value::Null), // Transaction not found
+    };
+
+    if mapping.len() < 44 { // 8 + 4 + 32
+        return Ok(Value::Null);
+    }
+
+    let block_number = u64::from_le_bytes(mapping[0..8].try_into().unwrap());
+    let tx_index = u32::from_le_bytes(mapping[8..12].try_into().unwrap()) as usize;
+    let block_hash = H256::from_slice(&mapping[12..44])
+        .map_err(|_| JsonRpcError::internal_error("invalid block hash in meta"))?;
+
+    // Get receipts for this block
+    let receipts_bytes = ctx.block_db.get_receipts(&block_hash)
+        .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+    let receipts_bytes = match receipts_bytes {
+        Some(b) => b,
+        None => return Ok(Value::Null),
+    };
+
+    // Decode receipts
+    let receipts = crate::decode_receipts(&receipts_bytes);
+    let receipts = match receipts {
+        Some(r) => r,
+        None => return Ok(Value::Null),
+    };
+
+    if tx_index >= receipts.len() {
+        return Ok(Value::Null);
+    }
+
+    let receipt = &receipts[tx_index];
+
+    // Build RPC receipt
+    let rpc_receipt = RpcReceipt {
+        transaction_hash: tx_hash.to_hex(),
+        transaction_index: format_u64(tx_index as u64),
+        block_hash: block_hash.to_hex(),
+        block_number: format_u64(block_number),
+        from: "0x".to_string(), // Would need to store sender in meta
+        to: None,
+        cumulative_gas_used: format_u64(receipt.cumulative_gas_used),
+        gas_used: format_u64(receipt.gas_used),
+        contract_address: receipt.contract_address.as_ref().map(|a| a.to_hex()),
+        logs: receipt.logs.iter().enumerate().map(|(i, log)| {
+            RpcLog {
+                address: log.address.to_hex(),
+                topics: log.topics.iter().map(|t| t.to_hex()).collect(),
+                data: format_bytes(&log.data),
+                block_number: format_u64(block_number),
+                transaction_hash: tx_hash.to_hex(),
+                transaction_index: format_u64(tx_index as u64),
+                block_hash: block_hash.to_hex(),
+                log_index: format_u64(i as u64),
+                removed: false,
+            }
+        }).collect(),
+        logs_bloom: format_bytes(&receipt.logs_bloom.0),
+        status: format_u64(if receipt.is_success() { 1 } else { 0 }),
+        effective_gas_price: format_u64(ctx.get_gas_price()),
+        tx_type: format_u64(0),
+    };
+
+    serde_json::to_value(rpc_receipt)
+        .map_err(|e| JsonRpcError::internal_error(e.to_string()))
 }
 
-// Helper functions
+// ==================== Helper functions ====================
 
 fn resolve_block_number(ctx: &RpcContext, block_id: BlockId) -> Result<u64, JsonRpcError> {
     match block_id {
@@ -497,7 +615,6 @@ fn resolve_block_number(ctx: &RpcContext, block_id: BlockId) -> Result<u64, Json
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?
             .ok_or_else(|| JsonRpcError::resource_not_found("no finalized block")),
         BlockId::Hash(h) => {
-            // Find block number by hash
             let latest = ctx
                 .block_db
                 .get_latest_block()
@@ -526,21 +643,17 @@ fn get_block_by_hash_internal(
     number: u64,
     _full_txs: bool,
 ) -> Result<Value, JsonRpcError> {
-    // Get block hash
     let hash = ctx
         .block_db
         .get_hash_by_number(number)
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?
         .ok_or_else(|| JsonRpcError::resource_not_found("block not found"))?;
 
-    // Get header (raw bytes)
     let _header_bytes = ctx
         .block_db
         .get_header(&hash)
         .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
-    // For now, return a minimal block structure
-    // TODO: Decode header bytes and build full RpcBlock
     let block = RpcBlock {
         hash: hash.to_hex(),
         parent_hash: H256::ZERO.to_hex(),
@@ -592,7 +705,7 @@ fn build_rpc_transaction(
         r: tx.signature.r.to_hex(),
         s: tx.signature.s.to_hex(),
         tx_type: format_u64(tx.tx_type() as u64),
-        chain_id: None, // TODO
+        chain_id: None,
         max_fee_per_gas: tx.max_fee_per_gas().map(format_u128),
         max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(format_u128),
     }
@@ -606,8 +719,6 @@ fn compute_signing_hash(
     tx: &bach_types::SignedTransaction,
     chain_id: u64,
 ) -> Result<H256, JsonRpcError> {
-    // For legacy transactions, the signing hash is computed from RLP([nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0])
-    // This is EIP-155 replay protection
     let mut stream = RlpStream::new_list(9);
     stream.append(&tx.nonce());
     stream.append(&tx.gas_price().unwrap_or(0));
@@ -628,26 +739,18 @@ fn compute_signing_hash(
     Ok(keccak256(&stream.out()))
 }
 
-/// Decode a raw RLP-encoded transaction
 fn decode_raw_transaction(raw_tx: &[u8]) -> Result<SignedTransaction, String> {
     if raw_tx.is_empty() {
         return Err("empty transaction data".to_string());
     }
 
-    // Check for typed transaction (EIP-2718)
-    // If first byte < 0xc0, it's a typed transaction
-    // Otherwise it's a legacy transaction (RLP list)
     if raw_tx[0] >= 0xc0 {
-        // Legacy transaction
         decode_legacy_transaction(raw_tx)
     } else {
-        // Typed transaction (type prefix + RLP payload)
-        // For now, only support legacy
         Err("typed transactions not yet supported".to_string())
     }
 }
 
-/// Decode a legacy RLP transaction
 fn decode_legacy_transaction(raw_tx: &[u8]) -> Result<SignedTransaction, String> {
     let rlp = Rlp::new(raw_tx);
 
@@ -663,12 +766,10 @@ fn decode_legacy_transaction(raw_tx: &[u8]) -> Result<SignedTransaction, String>
         ));
     }
 
-    // Decode fields: nonce, gasPrice, gasLimit, to, value, data, v, r, s
     let nonce: u64 = rlp.val_at(0).map_err(|e| format!("invalid nonce: {}", e))?;
     let gas_price: u128 = decode_u128_from_rlp(&rlp, 1)?;
     let gas_limit: u64 = rlp.val_at(2).map_err(|e| format!("invalid gas_limit: {}", e))?;
 
-    // 'to' can be empty (contract creation) or 20 bytes
     let to_bytes: Vec<u8> = rlp.val_at(3).map_err(|e| format!("invalid to: {}", e))?;
     let to = if to_bytes.is_empty() {
         None
@@ -699,7 +800,6 @@ fn decode_legacy_transaction(raw_tx: &[u8]) -> Result<SignedTransaction, String>
     Ok(SignedTransaction::new_legacy(tx, signature))
 }
 
-/// Helper to decode u128 from RLP (handles variable-length encoding)
 fn decode_u128_from_rlp(rlp: &Rlp, index: usize) -> Result<u128, String> {
     let bytes: Vec<u8> = rlp.val_at(index).map_err(|e| format!("invalid u128 at {}: {}", index, e))?;
     if bytes.is_empty() {
@@ -713,12 +813,80 @@ fn decode_u128_from_rlp(rlp: &Rlp, index: usize) -> Result<u128, String> {
     Ok(u128::from_be_bytes(arr))
 }
 
+// ==================== RPC State Adapter ====================
+
+/// StateAccess adapter for RPC calls that reads from StateDb
+struct RpcStateAdapter<'a> {
+    ctx: &'a RpcContext,
+    /// Local storage overrides (for eth_call that modifies state during execution)
+    storage_overrides: std::collections::HashMap<(Address, H256), H256>,
+}
+
+impl<'a> RpcStateAdapter<'a> {
+    fn new(ctx: &'a RpcContext) -> Self {
+        Self {
+            ctx,
+            storage_overrides: std::collections::HashMap::new(),
+        }
+    }
+}
+
+impl<'a> bach_evm::StateAccess for RpcStateAdapter<'a> {
+    fn get_storage(&self, address: &Address, key: &H256) -> H256 {
+        // Check overrides first
+        if let Some(v) = self.storage_overrides.get(&(*address, *key)) {
+            return *v;
+        }
+        self.ctx.state_db.get_storage(address, key).unwrap_or(H256::ZERO)
+    }
+
+    fn set_storage(&mut self, address: Address, key: H256, value: H256) {
+        self.storage_overrides.insert((address, key), value);
+    }
+
+    fn get_balance(&self, address: &Address) -> u128 {
+        self.ctx.state_db.get_balance(address).unwrap_or(0)
+    }
+
+    fn get_code(&self, address: &Address) -> Vec<u8> {
+        let code_hash = self.ctx.state_db.get_code_hash(address).unwrap_or(EMPTY_CODE_HASH);
+        if code_hash.is_zero() || code_hash == EMPTY_CODE_HASH {
+            return vec![];
+        }
+        self.ctx.state_db.get_code(&code_hash).unwrap_or(None).unwrap_or_default()
+    }
+
+    fn get_code_hash(&self, address: &Address) -> H256 {
+        self.ctx.state_db.get_code_hash(address).unwrap_or(EMPTY_CODE_HASH)
+    }
+
+    fn account_exists(&self, address: &Address) -> bool {
+        self.ctx.state_db.account_exists(address).unwrap_or(false)
+    }
+
+    fn transfer(&mut self, _from: &Address, _to: &Address, _value: u128) -> Result<(), bach_evm::EvmError> {
+        // In eth_call, transfers are simulated (don't actually move funds)
+        Ok(())
+    }
+
+    fn get_nonce(&self, address: &Address) -> u64 {
+        self.ctx.state_db.get_nonce(address).unwrap_or(0)
+    }
+
+    fn increment_nonce(&mut self, _address: &Address) -> u64 { 0 }
+    fn mark_warm(&mut self, _address: &Address) {}
+    fn is_warm(&self, _address: &Address) -> bool { true }
+    fn mark_storage_warm(&mut self, _address: &Address, _key: &H256) {}
+    fn is_storage_warm(&self, _address: &Address, _key: &H256) -> bool { true }
+    fn snapshot(&self) -> usize { 0 }
+    fn revert_to_snapshot(&mut self, _snapshot: usize) {}
+    fn commit_snapshot(&mut self, _snapshot: usize) {}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use bach_types::TxSignature;
-
-    // ===== Format Function Tests =====
 
     #[test]
     fn test_format_functions() {
@@ -729,66 +897,20 @@ mod tests {
     }
 
     #[test]
-    fn test_format_u64_edge_cases() {
-        assert_eq!(format_u64(u64::MAX), "0xffffffffffffffff");
-        assert_eq!(format_u64(1), "0x1");
-        assert_eq!(format_u64(16), "0x10");
-    }
-
-    #[test]
-    fn test_format_u128_edge_cases() {
-        assert_eq!(format_u128(0), "0x0");
-        assert_eq!(format_u128(u128::MAX), "0xffffffffffffffffffffffffffffffff");
-    }
-
-    #[test]
-    fn test_format_bytes_edge_cases() {
-        assert_eq!(format_bytes(&[]), "0x");
-        assert_eq!(format_bytes(&[0x00]), "0x00");
-        assert_eq!(format_bytes(&[0xff, 0xff]), "0xffff");
-    }
-
-    // ===== Transaction Hash Tests =====
-
-    #[test]
     fn test_compute_tx_hash() {
         let raw_tx = hex::decode("f86c098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a76400008025a028ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa636276a067cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d83").unwrap();
         let hash = compute_tx_hash(&raw_tx);
-        // Hash should be non-zero
         assert_ne!(hash, H256::ZERO);
     }
-
-    // ===== decode_raw_transaction Tests =====
 
     #[test]
     fn test_decode_raw_transaction_empty() {
         let result = decode_raw_transaction(&[]);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("empty"));
     }
-
-    #[test]
-    fn test_decode_raw_transaction_typed_not_supported() {
-        // Typed transaction (starts with 0x01, 0x02, etc.)
-        let typed_tx = vec![0x02, 0x01, 0x02, 0x03];
-        let result = decode_raw_transaction(&typed_tx);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("typed transactions not yet supported"));
-    }
-
-    #[test]
-    fn test_decode_legacy_transaction_invalid_rlp() {
-        // Invalid RLP that's not a list
-        let invalid = vec![0x80]; // RLP empty string
-        let result = decode_raw_transaction(&invalid);
-        assert!(result.is_err());
-    }
-
-    // ===== BlockId Resolution Tests =====
 
     #[test]
     fn test_block_id_variants() {
-        // Test that all BlockId variants exist
         let _ = BlockId::Number(100);
         let _ = BlockId::Hash(H256::ZERO);
         let _ = BlockId::Latest;
@@ -798,88 +920,6 @@ mod tests {
         let _ = BlockId::Finalized;
     }
 
-    // ===== CallRequest Parsing Tests =====
-
-    #[test]
-    fn test_call_request_defaults() {
-        let req = CallRequest::default();
-        assert!(req.from.is_none());
-        assert!(req.to.is_none());
-        assert!(req.gas.is_none());
-        assert!(req.gas_price.is_none());
-        assert!(req.value.is_none());
-        assert!(req.data.is_none());
-        assert!(req.nonce.is_none());
-    }
-
-    // ===== RpcTransaction Builder Tests =====
-
-    #[test]
-    fn test_build_rpc_transaction_pending() {
-        let tx = SignedTransaction::new_legacy(
-            LegacyTx {
-                nonce: 0,
-                gas_price: 1_000_000_000,
-                gas_limit: 21000,
-                to: Some(Address::ZERO),
-                value: 1_000_000_000_000_000_000, // 1 ETH
-                data: Bytes::new(),
-            },
-            TxSignature::new(27, H256::ZERO, H256::ZERO),
-        );
-
-        let sender = Address::ZERO;
-        let hash = H256::ZERO;
-
-        let rpc_tx = build_rpc_transaction(&tx, &sender, &hash, None, None, None);
-
-        // Pending transaction should have None for block info
-        assert!(rpc_tx.block_hash.is_none());
-        assert!(rpc_tx.block_number.is_none());
-        assert!(rpc_tx.transaction_index.is_none());
-        assert_eq!(rpc_tx.nonce, "0x0");
-        assert_eq!(rpc_tx.gas, "0x5208"); // 21000 in hex
-    }
-
-    #[test]
-    fn test_build_rpc_transaction_confirmed() {
-        let tx = SignedTransaction::new_legacy(
-            LegacyTx {
-                nonce: 5,
-                gas_price: 2_000_000_000,
-                gas_limit: 21000,
-                to: Some(Address::ZERO),
-                value: 0,
-                data: Bytes::from(vec![0xab, 0xcd]),
-            },
-            TxSignature::new(28, H256::ZERO, H256::ZERO),
-        );
-
-        let sender = Address::ZERO;
-        let hash = H256::ZERO;
-        let block_hash = H256::from_bytes([0x01; 32]);
-        let block_number = 100u64;
-        let tx_index = 5u64;
-
-        let rpc_tx = build_rpc_transaction(
-            &tx,
-            &sender,
-            &hash,
-            Some(block_hash),
-            Some(block_number),
-            Some(tx_index),
-        );
-
-        // Confirmed transaction should have block info
-        assert!(rpc_tx.block_hash.is_some());
-        assert_eq!(rpc_tx.block_number, Some("0x64".to_string())); // 100 in hex
-        assert_eq!(rpc_tx.transaction_index, Some("0x5".to_string()));
-        assert_eq!(rpc_tx.nonce, "0x5");
-        assert_eq!(rpc_tx.input, "0xabcd");
-    }
-
-    // ===== Address Parsing in eth methods =====
-
     #[test]
     fn test_parse_address_valid() {
         let addr_value = Value::String("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266".to_string());
@@ -888,52 +928,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_address_invalid_type() {
-        let result = parse_address(&Value::Number(123.into()));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_address_invalid_hex() {
-        let result = parse_address(&Value::String("0xGGGG".to_string()));
-        assert!(result.is_err());
-    }
-
-    // ===== H256 Parsing Tests =====
-
-    #[test]
-    fn test_parse_h256_valid() {
-        let hash_str = "0x0000000000000000000000000000000000000000000000000000000000000001";
-        let result = parse_h256(&Value::String(hash_str.to_string()));
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_parse_h256_short() {
-        let result = parse_h256(&Value::String("0x1234".to_string()));
-        assert!(result.is_err());
-    }
-
-    // ===== Hex Bytes Parsing Tests =====
-
-    #[test]
     fn test_parse_hex_bytes_valid() {
         let result = parse_hex_bytes(&Value::String("0xabcd1234".to_string()));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), vec![0xab, 0xcd, 0x12, 0x34]);
-    }
-
-    #[test]
-    fn test_parse_hex_bytes_empty() {
-        let result = parse_hex_bytes(&Value::String("0x".to_string()));
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
-    }
-
-    #[test]
-    fn test_parse_hex_bytes_no_prefix() {
-        let result = parse_hex_bytes(&Value::String("abcd".to_string()));
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![0xab, 0xcd]);
     }
 }

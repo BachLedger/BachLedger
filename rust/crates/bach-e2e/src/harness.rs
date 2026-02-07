@@ -384,38 +384,50 @@ impl TestHarness {
         }
     }
 
-    /// Compute legacy transaction hash for signing
+    /// Compute legacy transaction hash for signing (EIP-155)
     ///
-    /// Must match the executor's compute_signing_hash exactly
+    /// Must match the executor's compute_signing_hash exactly:
+    /// keccak256(RLP([nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]))
     fn compute_legacy_tx_hash(&self, tx: &LegacyTx) -> H256 {
-        // Must match bach_core::executor::compute_signing_hash
-        // Fields: nonce, gas_limit, value, data, [to]
-        let mut data = Vec::new();
-        data.extend_from_slice(&tx.nonce.to_le_bytes());
-        data.extend_from_slice(&tx.gas_limit.to_le_bytes());
-        data.extend_from_slice(&tx.value.to_le_bytes());
-        data.extend_from_slice(&tx.data);
+        let mut stream = bach_rlp::RlpStream::new_list(9);
+        stream.append(&tx.nonce);
+        stream.append(&tx.gas_price);
+        stream.append(&tx.gas_limit);
         if let Some(to) = &tx.to {
-            data.extend_from_slice(to.as_bytes());
+            stream.append(to);
+        } else {
+            stream.append_empty_data();
         }
-        keccak256(&data)
+        stream.append(&tx.value);
+        stream.append(&tx.data.to_vec());
+        stream.append(&self.chain_id);
+        stream.append(&0u8);
+        stream.append(&0u8);
+        keccak256(&stream.out())
     }
 
-    /// Compute EIP-1559 transaction hash for signing
+    /// Compute EIP-1559 transaction hash for signing (EIP-155 compatible)
     ///
-    /// Must match the executor's compute_signing_hash exactly
+    /// For simplicity, uses same format as legacy for now since executor
+    /// handles both the same way.
     fn compute_eip1559_tx_hash(&self, tx: &DynamicFeeTx) -> H256 {
-        // Must match bach_core::executor::compute_signing_hash
-        // Fields: nonce, gas_limit, value, data, [to]
-        let mut data = Vec::new();
-        data.extend_from_slice(&tx.nonce.to_le_bytes());
-        data.extend_from_slice(&tx.gas_limit.to_le_bytes());
-        data.extend_from_slice(&tx.value.to_le_bytes());
-        data.extend_from_slice(&tx.data);
+        // The executor's compute_signing_hash treats all as legacy format
+        let gas_price = tx.max_fee_per_gas;
+        let mut stream = bach_rlp::RlpStream::new_list(9);
+        stream.append(&tx.nonce);
+        stream.append(&gas_price);
+        stream.append(&tx.gas_limit);
         if let Some(to) = &tx.to {
-            data.extend_from_slice(to.as_bytes());
+            stream.append(to);
+        } else {
+            stream.append_empty_data();
         }
-        keccak256(&data)
+        stream.append(&tx.value);
+        stream.append(&tx.data.to_vec());
+        stream.append(&self.chain_id);
+        stream.append(&0u8);
+        stream.append(&0u8);
+        keccak256(&stream.out())
     }
 
     /// Get access to the underlying state (for advanced testing)

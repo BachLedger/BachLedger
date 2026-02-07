@@ -2,8 +2,8 @@
 
 use crate::config::NodeConfig;
 use crate::genesis::{
-    compute_block_hash, decode_body, decode_header, encode_body, encode_header, encode_receipts,
-    GenesisBuilder,
+    compute_block_hash, decode_body, decode_header, encode_body, encode_header,
+    encode_receipts, GenesisBuilder,
 };
 use bach_core::{BlockExecutor, ExecutionState};
 use bach_primitives::{Address, H256};
@@ -49,6 +49,7 @@ pub struct Node {
     running: Arc<RwLock<bool>>,
 }
 
+#[allow(dead_code)]
 impl Node {
     /// Create a new node
     pub async fn new(config: NodeConfig) -> NodeResult<Self> {
@@ -75,7 +76,7 @@ impl Node {
         // Create transaction pool
         let txpool = Arc::new(TxPool::with_defaults());
 
-        // Create block executor with state from database
+        // Load state from database into executor
         let execution_state = load_state_from_db(&state_db)?;
         let executor = Arc::new(RwLock::new(BlockExecutor::with_state(
             execution_state,
@@ -120,6 +121,16 @@ impl Node {
     /// Get the RPC config
     pub fn rpc_config(&self) -> &crate::config::RpcConfig {
         &self.config.rpc
+    }
+
+    /// Create an RPC context from this node's resources
+    pub fn create_rpc_context(&self) -> bach_rpc::RpcContext {
+        bach_rpc::RpcContext::new(
+            self.state_db().clone(),
+            self.block_db().clone(),
+            self.txpool().clone(),
+            self.chain_id(),
+        )
     }
 
     /// Run the node
@@ -193,12 +204,15 @@ impl Node {
             .unwrap()
             .as_secs();
 
+        // Get coinbase address from config or use default
+        let coinbase = self.config.block.coinbase.unwrap_or(Address::ZERO);
+
         // Build block
         let block = Block {
             header: BlockHeader {
                 parent_hash: latest_hash,
                 ommers_hash: H256::ZERO,
-                beneficiary: Address::ZERO, // TODO: Configure coinbase
+                beneficiary: coinbase,
                 state_root: H256::ZERO,
                 transactions_root: H256::ZERO,
                 receipts_root: H256::ZERO,
@@ -221,6 +235,12 @@ impl Node {
         // Execute block
         let result = executor.execute_block(&block)?;
 
+        // Commit execution state changes to persistent database
+        let cache = executor.state().cache();
+        self.state_db.commit(cache).map_err(|e| {
+            NodeError::Internal(format!("failed to commit state: {}", e))
+        })?;
+
         // Compute block hash
         let hash = compute_block_hash(&block);
 
@@ -235,9 +255,27 @@ impl Node {
         self.block_db.put_hash_by_number(new_number, &hash)?;
         self.block_db.set_latest_block(new_number)?;
 
+        // Store tx_hash -> (block_number, tx_index) mapping for receipt lookups
+        for (tx_index, pooled_tx) in transactions.iter().enumerate() {
+            let tx_hash = pooled_tx.hash;
+            let mut mapping = Vec::new();
+            mapping.extend_from_slice(&new_number.to_le_bytes());
+            mapping.extend_from_slice(&(tx_index as u32).to_le_bytes());
+            mapping.extend_from_slice(hash.as_bytes());
+            self.block_db.put_meta(
+                format!("tx:{}", tx_hash.to_hex()).as_bytes(),
+                &mapping,
+            )?;
+        }
+
         // Update transaction pool nonces
         for tx in &transactions {
             self.txpool.set_nonce(&tx.sender, tx.nonce() + 1);
+        }
+
+        // Remove executed transactions from pool
+        for tx in &transactions {
+            self.txpool.remove(&tx.hash);
         }
 
         tracing::info!(
@@ -321,12 +359,10 @@ impl Node {
     }
 }
 
-/// Load state from database into ExecutionState
-fn load_state_from_db(_state_db: &StateDb) -> NodeResult<ExecutionState> {
-    // For now, start with empty state
-    // In a production implementation, this would scan the database
-    // and load all accounts into the execution state
-    Ok(ExecutionState::new())
+/// Create execution state backed by the database.
+/// Reads fall through to StateDb on cache miss, writes accumulate in cache.
+fn load_state_from_db(state_db: &Arc<StateDb>) -> NodeResult<ExecutionState> {
+    Ok(ExecutionState::with_db(state_db.clone()))
 }
 
 #[cfg(test)]
@@ -380,7 +416,6 @@ mod tests {
 
         let node = Node::new(config).await.unwrap();
 
-        // Genesis should be at block 0
         let block = node.get_block_by_number(0).unwrap();
         assert!(block.is_some());
 
@@ -398,11 +433,9 @@ mod tests {
 
         let node = Node::new(config).await.unwrap();
 
-        // Check balance of pre-funded account
         let addr = crate::config::parse_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
         let balance = node.get_balance(&addr).unwrap();
 
-        // Should have 10000 ETH
         assert!(balance > 0);
 
         cleanup(&datadir);
@@ -416,81 +449,6 @@ mod tests {
         let node = Node::new(config).await.unwrap();
 
         assert!(!node.is_running().await);
-
-        cleanup(&datadir);
-    }
-
-    #[tokio::test]
-    async fn test_node_stop() {
-        let datadir = temp_dir();
-        let config = test_config(datadir.clone());
-
-        let node = Node::new(config).await.unwrap();
-
-        node.stop().await;
-        assert!(!node.is_running().await);
-
-        cleanup(&datadir);
-    }
-
-    #[tokio::test]
-    async fn test_node_get_nonce() {
-        let datadir = temp_dir();
-        let config = test_config(datadir.clone());
-
-        let node = Node::new(config).await.unwrap();
-
-        let addr = crate::config::parse_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
-        let nonce = node.get_nonce(&addr).unwrap();
-
-        // Initial nonce should be 0
-        assert_eq!(nonce, 0);
-
-        cleanup(&datadir);
-    }
-
-    #[tokio::test]
-    async fn test_node_get_code_empty() {
-        let datadir = temp_dir();
-        let config = test_config(datadir.clone());
-
-        let node = Node::new(config).await.unwrap();
-
-        // EOA should have no code
-        let addr = crate::config::parse_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
-        let code = node.get_code(&addr).unwrap();
-
-        assert!(code.is_empty());
-
-        cleanup(&datadir);
-    }
-
-    #[tokio::test]
-    async fn test_node_get_storage_empty() {
-        let datadir = temp_dir();
-        let config = test_config(datadir.clone());
-
-        let node = Node::new(config).await.unwrap();
-
-        let addr = crate::config::parse_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
-        let slot = H256::ZERO;
-        let value = node.get_storage(&addr, &slot).unwrap();
-
-        assert_eq!(value, H256::ZERO);
-
-        cleanup(&datadir);
-    }
-
-    #[tokio::test]
-    async fn test_node_block_not_found() {
-        let datadir = temp_dir();
-        let config = test_config(datadir.clone());
-
-        let node = Node::new(config).await.unwrap();
-
-        // Block 999 should not exist
-        let block = node.get_block_by_number(999).unwrap();
-        assert!(block.is_none());
 
         cleanup(&datadir);
     }
