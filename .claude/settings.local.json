@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:README.md)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger branch -a)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger log --oneline main..trial-2)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger log --oneline develop)",
+      "Bash(git checkout:*)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger status)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger diff)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger log --oneline -5)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger push --all)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger checkout trial-2)",
+      "Bash(git ls-tree:*)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger log --oneline -20)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:rust/docs/PLAN.md)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:rust/Cargo.toml)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger ls-tree:*)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:rust/crates/bach-storage/src/traits.rs)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:rust/crates/bach-core/src/executor.rs)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:rust/crates/bach-evm/src/lib.rs)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger show main:rust/crates/bach-evm/src/interpreter.rs)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger log --oneline develop..main)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger log --oneline main..develop)",
+      "Bash(git -C /Users/moonshot/dev/working/bachledger diff --stat main..trial-2)"
+    ]
+  }
+}

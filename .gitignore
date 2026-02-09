@@ -33,5 +33,3 @@ rust/test-keys/
 rust/node.key
 rust/*.json
 !rust/package.json
-.claude
-!.claude/skills
