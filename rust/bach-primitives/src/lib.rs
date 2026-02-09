@@ -485,30 +485,168 @@ impl U256 {
         self.0[0] == 0 && self.0[1] == 0 && self.0[2] == 0 && self.0[3] == 0
     }
 
-    /// Returns the number of bits needed to represent this value
-    fn bits(&self) -> usize {
-        for i in (0..4).rev() {
-            if self.0[i] != 0 {
-                return (i + 1) * 64 - self.0[i].leading_zeros() as usize;
-            }
+    /// Wrapping addition (modulo 2^256)
+    pub fn wrapping_add(&self, other: &Self) -> Self {
+        let mut result = [0u64; 4];
+        let mut carry = 0u64;
+        for i in 0..4 {
+            let (sum1, c1) = self.0[i].overflowing_add(other.0[i]);
+            let (sum2, c2) = sum1.overflowing_add(carry);
+            result[i] = sum2;
+            carry = (c1 as u64) + (c2 as u64);
         }
-        0
+        Self(result)
     }
 
-    /// Left shift by n bits (internal helper)
-    fn shl(&self, n: usize) -> Self {
+    /// Wrapping subtraction (modulo 2^256)
+    pub fn wrapping_sub(&self, other: &Self) -> Self {
+        let mut result = [0u64; 4];
+        let mut borrow = 0u64;
+        for i in 0..4 {
+            let (diff1, b1) = self.0[i].overflowing_sub(other.0[i]);
+            let (diff2, b2) = diff1.overflowing_sub(borrow);
+            result[i] = diff2;
+            borrow = (b1 as u64) + (b2 as u64);
+        }
+        Self(result)
+    }
+
+    /// Wrapping multiplication (modulo 2^256)
+    pub fn wrapping_mul(&self, other: &Self) -> Self {
+        if self.is_zero() || other.is_zero() {
+            return Self::ZERO;
+        }
+        let mut result = [0u64; 4];
+        for i in 0..4 {
+            if self.0[i] == 0 {
+                continue;
+            }
+            let mut carry: u64 = 0;
+            for j in 0..4 {
+                if i + j >= 4 {
+                    break;
+                }
+                let product = (self.0[i] as u128) * (other.0[j] as u128)
+                    + (result[i + j] as u128)
+                    + (carry as u128);
+                result[i + j] = product as u64;
+                carry = (product >> 64) as u64;
+            }
+        }
+        Self(result)
+    }
+
+    /// Wrapping modulo
+    pub fn wrapping_mod(&self, other: &Self) -> Self {
+        if other.is_zero() {
+            return Self::ZERO;
+        }
+        let (_, rem) = self.div_rem(other);
+        rem
+    }
+
+    /// Division with remainder
+    pub fn div_rem(&self, other: &Self) -> (Self, Self) {
+        if other.is_zero() {
+            return (Self::ZERO, Self::ZERO);
+        }
+        if self.is_zero() {
+            return (Self::ZERO, Self::ZERO);
+        }
+        if self < other {
+            return (Self::ZERO, *self);
+        }
+        if self == other {
+            return (Self::ONE, Self::ZERO);
+        }
+
+        let mut quotient = Self::ZERO;
+        let mut remainder = *self;
+        let divisor_bits = other.bits();
+        let dividend_bits = self.bits();
+        let mut shift = dividend_bits.saturating_sub(divisor_bits);
+        let mut shifted_divisor = other.shl(shift);
+
+        loop {
+            if remainder >= shifted_divisor {
+                remainder = remainder.checked_sub(&shifted_divisor).unwrap();
+                quotient = quotient.set_bit(shift);
+            }
+            if shift == 0 {
+                break;
+            }
+            shift -= 1;
+            shifted_divisor = shifted_divisor.shr1();
+        }
+        (quotient, remainder)
+    }
+
+    /// Bitwise AND
+    pub fn bitand(&self, other: &Self) -> Self {
+        Self([
+            self.0[0] & other.0[0],
+            self.0[1] & other.0[1],
+            self.0[2] & other.0[2],
+            self.0[3] & other.0[3],
+        ])
+    }
+
+    /// Bitwise OR
+    pub fn bitor(&self, other: &Self) -> Self {
+        Self([
+            self.0[0] | other.0[0],
+            self.0[1] | other.0[1],
+            self.0[2] | other.0[2],
+            self.0[3] | other.0[3],
+        ])
+    }
+
+    /// Bitwise XOR
+    pub fn bitxor(&self, other: &Self) -> Self {
+        Self([
+            self.0[0] ^ other.0[0],
+            self.0[1] ^ other.0[1],
+            self.0[2] ^ other.0[2],
+            self.0[3] ^ other.0[3],
+        ])
+    }
+
+    /// Bitwise NOT
+    pub fn bitnot(&self) -> Self {
+        Self([!self.0[0], !self.0[1], !self.0[2], !self.0[3]])
+    }
+
+    /// Convert to usize (truncates)
+    pub fn as_usize(&self) -> usize {
+        self.0[0] as usize
+    }
+
+    /// Convert to u64 (truncates)
+    pub fn as_u64(&self) -> u64 {
+        self.0[0]
+    }
+
+    /// Check if high bit is set (negative in two's complement)
+    pub fn is_negative(&self) -> bool {
+        self.0[3] & (1 << 63) != 0
+    }
+
+    /// Two's complement negation
+    pub fn twos_complement(&self) -> Self {
+        self.bitnot().wrapping_add(&Self::ONE)
+    }
+
+    /// Left shift by n bits
+    pub fn shl(&self, n: usize) -> Self {
         if n == 0 {
             return *self;
         }
         if n >= 256 {
             return Self::ZERO;
         }
-
         let limb_shift = n / 64;
         let bit_shift = n % 64;
-
         let mut result = [0u64; 4];
-
         if bit_shift == 0 {
             for i in limb_shift..4 {
                 result[i] = self.0[i - limb_shift];
@@ -521,8 +659,53 @@ impl U256 {
                 }
             }
         }
-
         Self(result)
+    }
+
+    /// Right shift by n bits
+    pub fn shr(&self, n: usize) -> Self {
+        if n == 0 {
+            return *self;
+        }
+        if n >= 256 {
+            return Self::ZERO;
+        }
+        let limb_shift = n / 64;
+        let bit_shift = n % 64;
+        let mut result = [0u64; 4];
+        if bit_shift == 0 {
+            for i in 0..(4 - limb_shift) {
+                result[i] = self.0[i + limb_shift];
+            }
+        } else {
+            for i in 0..(4 - limb_shift) {
+                result[i] = self.0[i + limb_shift] >> bit_shift;
+                if i + limb_shift + 1 < 4 {
+                    result[i] |= self.0[i + limb_shift + 1] << (64 - bit_shift);
+                }
+            }
+        }
+        Self(result)
+    }
+
+    /// Get the internal limbs (for EVM operations)
+    pub fn limbs(&self) -> &[u64; 4] {
+        &self.0
+    }
+
+    /// Create from internal limbs
+    pub fn from_limbs(limbs: [u64; 4]) -> Self {
+        Self(limbs)
+    }
+
+    /// Returns the number of bits needed to represent this value
+    fn bits(&self) -> usize {
+        for i in (0..4).rev() {
+            if self.0[i] != 0 {
+                return (i + 1) * 64 - self.0[i].leading_zeros() as usize;
+            }
+        }
+        0
     }
 
     /// Right shift by 1 bit (internal helper)
@@ -603,52 +786,6 @@ impl std::fmt::Display for U256 {
         digits.reverse();
         let s: String = digits.iter().map(|&b| b as char).collect();
         write!(f, "{}", s)
-    }
-}
-
-impl U256 {
-    /// Division with remainder (internal helper for Display)
-    fn div_rem(&self, other: &Self) -> (Self, Self) {
-        if other.is_zero() {
-            panic!("division by zero");
-        }
-
-        if self.is_zero() {
-            return (Self::ZERO, Self::ZERO);
-        }
-
-        if self < other {
-            return (Self::ZERO, *self);
-        }
-
-        if self == other {
-            return (Self::ONE, Self::ZERO);
-        }
-
-        let mut quotient = Self::ZERO;
-        let mut remainder = *self;
-
-        let divisor_bits = other.bits();
-        let dividend_bits = self.bits();
-
-        let mut shift = dividend_bits.saturating_sub(divisor_bits);
-        let mut shifted_divisor = other.shl(shift);
-
-        loop {
-            if remainder >= shifted_divisor {
-                remainder = remainder.checked_sub(&shifted_divisor).unwrap();
-                quotient = quotient.set_bit(shift);
-            }
-
-            if shift == 0 {
-                break;
-            }
-
-            shift -= 1;
-            shifted_divisor = shifted_divisor.shr1();
-        }
-
-        (quotient, remainder)
     }
 }
 
