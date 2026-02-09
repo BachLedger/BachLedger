@@ -515,10 +515,24 @@ mod checked_mul {
 
     #[test]
     fn mul_overflow_large_values() {
-        // 2^128 * 2^128 = 2^256 which overflows
+        // (2^128)^2 = 2^256 which overflows (> U256::MAX = 2^256 - 1)
+        // Note: u128::MAX = 2^128 - 1, and (2^128 - 1)^2 = 2^256 - 2^129 + 1 which FITS
+        // So we need to construct 2^128 explicitly
+        let two_pow_128 = {
+            let mut bytes = [0u8; 32];
+            bytes[15] = 1; // Big-endian: byte 15 is the 128th bit position
+            U256::from_be_bytes(bytes)
+        };
+        let result = two_pow_128.checked_mul(&two_pow_128);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn mul_u128_max_squared_does_not_overflow() {
+        // (2^128 - 1)^2 = 2^256 - 2^129 + 1, which fits in 256 bits
         let large: U256 = u128::MAX.into();
         let result = large.checked_mul(&large);
-        assert_eq!(result, None);
+        assert!(result.is_some(), "u128::MAX squared should fit in U256");
     }
 
     #[test]
