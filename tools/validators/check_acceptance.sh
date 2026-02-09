@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Colors for output
@@ -8,32 +8,44 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+VERBOSE=false
+
 usage() {
     cat << EOF
-Usage: $(basename "$0") <requirements_file> <tests_dir>
+Usage: $(basename "$0") [OPTIONS] <requirements_file> <tests_dir>
 
-Parse requirements file to extract acceptance criteria and check test coverage.
+Parse requirements file to extract acceptance criteria and verify test coverage.
 
 Arguments:
-    requirements_file  Markdown file containing acceptance criteria
-    tests_dir         Directory containing test files
+    requirements_file  Markdown file containing acceptance criteria (requirements.md)
+    tests_dir          Directory containing test files
 
 Options:
-    -v, --verbose     Show detailed matching information
-    -h, --help        Show this help message
+    -v, --verbose  Show detailed matching information
+    -h, --help     Show this help message
 
-Acceptance criteria format (in requirements.md):
-    - Lines starting with "- [ ]" or "- [x]" are treated as criteria
-    - Lines under "## Acceptance Criteria" heading
+Functions:
+    - Parse acceptance criteria from requirements.md
+    - Scan test files for matching keywords
+    - Report uncovered acceptance items
+    - Generate coverage report
+
+Acceptance criteria formats recognized:
+    - Lines starting with "- [ ]" or "- [x]"
+    - Lines under "## Acceptance Criteria" section
     - Lines containing "MUST", "SHALL", "SHOULD" keywords
 
 Exit codes:
-    0  All acceptance criteria are covered by tests
+    0  All acceptance criteria have test coverage
     1  Missing test coverage or errors
 EOF
 }
 
-VERBOSE=false
+log_verbose() {
+    if [[ "$VERBOSE" == true ]]; then
+        echo -e "$1"
+    fi
+}
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -84,6 +96,7 @@ echo ""
 # Extract acceptance criteria from requirements file
 declare -a CRITERIA
 declare -a CRITERIA_IDS
+declare -a CRITERIA_KEYWORDS
 
 extract_criteria() {
     local in_acceptance_section=false
@@ -91,8 +104,9 @@ extract_criteria() {
 
     while IFS= read -r line; do
         # Check for acceptance criteria section
-        if [[ "$line" =~ ^##[[:space:]]*(Acceptance|Requirements|Criteria) ]]; then
+        if [[ "$line" =~ ^##[[:space:]]*(Acceptance|Requirements|Criteria|验收) ]]; then
             in_acceptance_section=true
+            log_verbose "  ${BLUE}Found acceptance section${NC}"
             continue
         fi
 
@@ -107,6 +121,7 @@ extract_criteria() {
             criterion_id=$((criterion_id + 1))
             CRITERIA+=("$criterion")
             CRITERIA_IDS+=("AC-$criterion_id")
+            log_verbose "  ${YELLOW}AC-$criterion_id:${NC} $criterion"
             continue
         fi
 
@@ -118,7 +133,9 @@ extract_criteria() {
                 criterion_id=$((criterion_id + 1))
                 CRITERIA+=("$criterion")
                 CRITERIA_IDS+=("AC-$criterion_id")
+                log_verbose "  ${YELLOW}AC-$criterion_id:${NC} $criterion"
             fi
+            continue
         fi
 
         # In acceptance section, treat list items as criteria
@@ -128,10 +145,14 @@ extract_criteria() {
                 criterion_id=$((criterion_id + 1))
                 CRITERIA+=("$criterion")
                 CRITERIA_IDS+=("AC-$criterion_id")
+                log_verbose "  ${YELLOW}AC-$criterion_id:${NC} $criterion"
             fi
         fi
     done < "$REQUIREMENTS_FILE"
 }
+
+echo -e "${BLUE}=== Extracting acceptance criteria ===${NC}"
+echo ""
 
 extract_criteria
 
@@ -147,7 +168,7 @@ if [[ ${#CRITERIA[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Get all test files
+# Get all test files and their content
 TEST_FILES=$(find "$TESTS_DIR" -name "*.rs" -type f 2>/dev/null || true)
 TEST_CONTENT=""
 
@@ -155,25 +176,26 @@ if [[ -n "$TEST_FILES" ]]; then
     TEST_CONTENT=$(cat $TEST_FILES 2>/dev/null || true)
 fi
 
-# Also check for test names and doc comments
+# Extract test names
 declare -a TEST_NAMES
 while IFS= read -r line; do
-    if [[ "$line" =~ fn[[:space:]]+test_([a-z_0-9]+) ]]; then
+    if [[ "$line" =~ fn[[:space:]]+(test_[a-z_0-9]+) ]]; then
         TEST_NAMES+=("${BASH_REMATCH[1]}")
     fi
-    if [[ "$line" =~ \#\[test\] ]]; then
-        TEST_NAMES+=("test_marker")
-    fi
 done <<< "$TEST_CONTENT"
+
+log_verbose "Found ${#TEST_NAMES[@]} test functions"
+log_verbose ""
 
 COVERED=0
 UNCOVERED=0
 declare -a UNCOVERED_CRITERIA
+declare -a COVERED_CRITERIA
 
-# Check each criterion for coverage
-echo -e "${BLUE}Checking coverage:${NC}"
+echo -e "${BLUE}=== Checking coverage ===${NC}"
 echo ""
 
+# Check each criterion for coverage
 for i in "${!CRITERIA[@]}"; do
     criterion="${CRITERIA[$i]}"
     criterion_id="${CRITERIA_IDS[$i]}"
@@ -184,11 +206,12 @@ for i in "${!CRITERIA[@]}"; do
         sed 's/[^a-z0-9 ]/ /g' | \
         tr ' ' '\n' | \
         grep -E '^[a-z]{4,}$' | \
-        grep -vE '^(must|shall|should|will|would|could|when|then|that|this|with|from|have|been|being)$' | \
+        grep -vE '^(must|shall|should|will|would|could|when|then|that|this|with|from|have|been|being|also|each|able|into|such)$' | \
         sort -u || true)
 
     found=false
     matching_tests=""
+    matching_terms=""
 
     for term in $search_terms; do
         if [[ -z "$term" ]]; then continue; fi
@@ -196,11 +219,16 @@ for i in "${!CRITERIA[@]}"; do
         # Search in test content
         if echo "$TEST_CONTENT" | grep -qi "$term" 2>/dev/null; then
             found=true
+            matching_terms="$matching_terms $term"
+
             if [[ "$VERBOSE" == true ]]; then
                 # Find which test files contain this term
                 for tf in $TEST_FILES; do
                     if grep -qi "$term" "$tf" 2>/dev/null; then
-                        matching_tests="$matching_tests $(basename "$tf")"
+                        tf_base=$(basename "$tf")
+                        if [[ ! "$matching_tests" =~ "$tf_base" ]]; then
+                            matching_tests="$matching_tests $tf_base"
+                        fi
                     fi
                 done
             fi
@@ -210,16 +238,22 @@ for i in "${!CRITERIA[@]}"; do
     # Also check for criterion ID in test comments
     if echo "$TEST_CONTENT" | grep -q "$criterion_id" 2>/dev/null; then
         found=true
+        matching_terms="$matching_terms [ID match]"
     fi
 
     if [[ "$found" == true ]]; then
-        echo -e "  ${GREEN}✓${NC} [$criterion_id] $criterion"
-        if [[ "$VERBOSE" == true ]] && [[ -n "$matching_tests" ]]; then
-            echo -e "    ${YELLOW}Found in:${NC}$matching_tests"
+        echo -e "${GREEN}✓${NC} [$criterion_id] $criterion"
+        if [[ "$VERBOSE" == true ]]; then
+            echo -e "  ${YELLOW}Matched terms:${NC}$matching_terms"
+            if [[ -n "$matching_tests" ]]; then
+                echo -e "  ${YELLOW}Found in:${NC}$matching_tests"
+            fi
         fi
         COVERED=$((COVERED + 1))
+        COVERED_CRITERIA+=("$criterion_id")
     else
-        echo -e "  ${RED}✗${NC} [$criterion_id] $criterion"
+        echo -e "${RED}✗${NC} [$criterion_id] $criterion"
+        log_verbose "  ${YELLOW}Search terms:${NC} $(echo $search_terms | tr '\n' ' ')"
         UNCOVERED=$((UNCOVERED + 1))
         UNCOVERED_CRITERIA+=("$criterion_id: $criterion")
     fi
@@ -227,15 +261,28 @@ done
 
 echo ""
 
-# Summary
+# Generate coverage report
 echo "================================"
-echo "Coverage Summary:"
-echo -e "  Covered:   ${GREEN}$COVERED${NC} / ${#CRITERIA[@]}"
-echo -e "  Uncovered: ${RED}$UNCOVERED${NC} / ${#CRITERIA[@]}"
+echo -e "${BLUE}Coverage Report${NC}"
+echo ""
+echo "Summary:"
+echo -e "  Total criteria:  ${#CRITERIA[@]}"
+echo -e "  Covered:         ${GREEN}$COVERED${NC}"
+echo -e "  Uncovered:       ${RED}$UNCOVERED${NC}"
 
 if [[ ${#CRITERIA[@]} -gt 0 ]]; then
     coverage_pct=$((COVERED * 100 / ${#CRITERIA[@]}))
-    echo -e "  Coverage:  ${YELLOW}$coverage_pct%${NC}"
+
+    # Color based on coverage level
+    if [[ $coverage_pct -ge 80 ]]; then
+        color=$GREEN
+    elif [[ $coverage_pct -ge 50 ]]; then
+        color=$YELLOW
+    else
+        color=$RED
+    fi
+
+    echo -e "  Coverage:        ${color}$coverage_pct%${NC}"
 fi
 
 echo ""
@@ -250,9 +297,9 @@ else
         echo -e "  ${RED}-${NC} $criterion"
     done
     echo ""
-    echo "Suggestions:"
+    echo "Recommendations:"
     echo "  1. Add tests that cover the uncovered criteria"
-    echo "  2. Add criterion IDs (e.g., AC-1) in test comments"
-    echo "  3. Use descriptive test names matching the criteria"
+    echo "  2. Add criterion IDs (e.g., // AC-1) in test comments"
+    echo "  3. Use descriptive test names matching the criteria keywords"
     exit 1
 fi

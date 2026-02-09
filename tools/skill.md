@@ -187,9 +187,7 @@ ICDD (Interface-Contract-Driven Development) is a multi-agent workflow that tran
 | Script | Purpose |
 |--------|---------|
 | `worktree/create_worktrees.sh` | Create isolated worktrees for parallel module development |
-| `worktree/merge_worktrees.sh` | Merge completed worktrees, resolve conflicts |
-| `worktree/resolve_cargo_conflict.py` | Auto-resolve Cargo.toml conflicts |
-| `worktree/resolve_librs_conflict.py` | Auto-resolve lib.rs conflicts |
+| `worktree/merge_worktrees.sh` | Merge completed worktrees, list conflicts for manual resolution |
 
 ### Knowledge (Team memory management)
 

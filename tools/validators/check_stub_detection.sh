@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Colors for output
@@ -8,29 +8,38 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+VERBOSE=false
+
 usage() {
     cat << EOF
 Usage: $(basename "$0") [OPTIONS] <src_dir>
 
 Detect stub implementations and incomplete code in Rust source files.
 
-Detects:
-    - todo!(), unimplemented!(), panic!("not impl...")
-    - Empty implementations: { }, { Default::default() }
-    - #[allow(unused)] hiding code
-    - Hardcoded return values bypassing logic
-
 Arguments:
     src_dir  Directory containing source files to check
 
 Options:
     -e, --exclude   Pattern to exclude (can be used multiple times)
+    -v, --verbose   Show detailed output
     -h, --help      Show this help message
+
+Detection patterns:
+    - todo!() / unimplemented!() / panic!("not impl...")
+    - Empty function bodies: { } or { Default::default() }
+    - #[allow(unused)] hiding incomplete code
+    - Hardcoded return values: return true; return 0; return vec![];
 
 Exit codes:
     0  No stubs or incomplete implementations found
     1  Stubs or incomplete implementations detected
 EOF
+}
+
+log_verbose() {
+    if [[ "$VERBOSE" == true ]]; then
+        echo -e "$1"
+    fi
 }
 
 EXCLUDE_PATTERNS=()
@@ -42,6 +51,10 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
             ;;
         -e|--exclude)
             EXCLUDE_PATTERNS+=("$2")
@@ -72,36 +85,45 @@ fi
 
 echo "Detecting stubs and incomplete implementations..."
 echo "Source directory: $SRC_DIR"
+if [[ ${#EXCLUDE_PATTERNS[@]} -gt 0 ]]; then
+    echo "Exclude patterns: ${EXCLUDE_PATTERNS[*]}"
+fi
 echo ""
 
 TOTAL_ISSUES=0
 declare -A ISSUES_BY_TYPE
+declare -a ISSUES_LIST
 
-# Build exclude pattern for grep
-EXCLUDE_ARGS=""
+# Build find exclude arguments
+FIND_EXCLUDES=""
 for pattern in "${EXCLUDE_PATTERNS[@]:-}"; do
     if [[ -n "$pattern" ]]; then
-        EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude=$pattern"
+        FIND_EXCLUDES="$FIND_EXCLUDES ! -path '*$pattern*'"
     fi
 done
 
-# Find all Rust source files (excluding tests by default for some checks)
-SRC_FILES=$(find "$SRC_DIR" -name "*.rs" -type f 2>/dev/null || true)
+# Find all Rust source files
+SRC_FILES=$(eval "find '$SRC_DIR' -name '*.rs' -type f $FIND_EXCLUDES 2>/dev/null" || true)
 
 if [[ -z "$SRC_FILES" ]]; then
     echo -e "${YELLOW}Warning: No Rust files found in $SRC_DIR${NC}"
     exit 0
 fi
 
+FILE_COUNT=$(echo "$SRC_FILES" | wc -l | tr -d ' ')
+log_verbose "Scanning $FILE_COUNT file(s)..."
+log_verbose ""
+
 check_pattern() {
     local pattern="$1"
     local description="$2"
     local issue_type="$3"
-    local results=""
+    local skip_tests="${4:-false}"
+    local count=0
 
     for file in $SRC_FILES; do
         # Skip test files for certain checks
-        if [[ "$issue_type" == "hardcoded" ]] && [[ "$file" =~ test ]]; then
+        if [[ "$skip_tests" == "true" ]] && [[ "$file" =~ (test|tests|_test\.rs) ]]; then
             continue
         fi
 
@@ -110,17 +132,20 @@ check_pattern() {
             while IFS= read -r match; do
                 if [[ -n "$match" ]]; then
                     line_num=$(echo "$match" | cut -d: -f1)
-                    line_content=$(echo "$match" | cut -d: -f2-)
-                    results="$results\n  $file:$line_num: $line_content"
+                    line_content=$(echo "$match" | cut -d: -f2- | sed 's/^[[:space:]]*//')
+                    ISSUES_LIST+=("$file:$line_num: $line_content")
+                    count=$((count + 1))
                 fi
             done <<< "$matches"
         fi
     done
 
-    if [[ -n "$results" ]]; then
-        count=$(echo -e "$results" | grep -c "^  " || echo "0")
+    if [[ $count -gt 0 ]]; then
         echo -e "${RED}$description ($count found):${NC}"
-        echo -e "$results"
+        # Show recent issues for this pattern
+        for item in "${ISSUES_LIST[@]: -$count}"; do
+            echo "  $item"
+        done
         echo ""
         TOTAL_ISSUES=$((TOTAL_ISSUES + count))
         ISSUES_BY_TYPE["$issue_type"]=$((${ISSUES_BY_TYPE["$issue_type"]:-0} + count))
@@ -139,16 +164,16 @@ check_pattern 'todo!\s*\(' "todo!() macros" "todo" || true
 check_pattern 'unimplemented!\s*\(' "unimplemented!() macros" "unimplemented" || true
 
 # Check for panic!("not implemented") variants
-check_pattern 'panic!\s*\(\s*"[^"]*not[[:space:]]*impl' "panic!(\"not implemented\") patterns" "panic_notimpl" || true
+check_pattern 'panic!\s*\(\s*"[^"]*[Nn]ot[[:space:]]*[Ii]mpl' "panic!(\"not implemented\") patterns" "panic_notimpl" || true
 
 echo -e "${BLUE}=== Checking for empty implementations ===${NC}"
 echo ""
 
-# Check for empty function bodies (accounting for various formatting)
-# This is tricky - look for fn ... { } or fn ... {\n}
+# Check for empty function bodies
+EMPTY_FN_COUNT=0
 for file in $SRC_FILES; do
     # Skip test files
-    if [[ "$file" =~ test ]]; then
+    if [[ "$file" =~ (test|tests|_test\.rs) ]]; then
         continue
     fi
 
@@ -159,22 +184,29 @@ for file in $SRC_FILES; do
             fn_text = $0;
             in_fn = 1;
             brace_count = 0;
-            body_lines = 0;
-            has_content = 0;
+            body_start = 0;
+            body_content = "";
         }
-        in_fn && /{/ { brace_count += gsub(/{/, "{") }
+        in_fn && /{/ {
+            brace_count += gsub(/{/, "{")
+            if (body_start == 0) body_start = NR
+        }
         in_fn && /}/ { brace_count -= gsub(/}/, "}") }
-        in_fn && brace_count > 0 && !/^[[:space:]]*$/ && !/^[[:space:]]*[{}][[:space:]]*$/ {
-            body_lines++
-            if (!/^[[:space:]]*(\/\/|\/\*|\*)/) {
-                has_content = 1
+        in_fn && brace_count > 0 {
+            # Collect body content (skip whitespace-only lines)
+            if (!/^[[:space:]]*$/ && !/^[[:space:]]*[{}][[:space:]]*$/) {
+                gsub(/^[[:space:]]+/, "", $0)
+                body_content = body_content " " $0
             }
         }
         in_fn && brace_count == 0 && /}/ {
-            if (body_lines <= 1 && !has_content) {
+            # Check if body is empty or trivial
+            gsub(/[[:space:]]+/, "", body_content)
+            if (body_content == "" || body_content == "{}" || body_content ~ /^[\{\}[:space:]]*$/) {
                 print fn_line ": " fn_text
             }
             in_fn = 0
+            body_content = ""
         }
     ' "$file" 2>/dev/null || true)
 
@@ -182,68 +214,99 @@ for file in $SRC_FILES; do
         while IFS= read -r match; do
             if [[ -n "$match" ]]; then
                 echo -e "  ${RED}$file:$match${NC}"
-                TOTAL_ISSUES=$((TOTAL_ISSUES + 1))
-                ISSUES_BY_TYPE["empty_fn"]=$((${ISSUES_BY_TYPE["empty_fn"]:-0} + 1))
+                ISSUES_LIST+=("$file:$match [empty body]")
+                EMPTY_FN_COUNT=$((EMPTY_FN_COUNT + 1))
             fi
         done <<< "$empty_fns"
     fi
 done
 
+if [[ $EMPTY_FN_COUNT -gt 0 ]]; then
+    echo -e "${RED}Empty function bodies ($EMPTY_FN_COUNT found)${NC}"
+    TOTAL_ISSUES=$((TOTAL_ISSUES + EMPTY_FN_COUNT))
+    ISSUES_BY_TYPE["empty_fn"]=$((${ISSUES_BY_TYPE["empty_fn"]:-0} + EMPTY_FN_COUNT))
+    echo ""
+fi
+
 # Check for Default::default() only returns
-check_pattern 'fn[^{]*\{[[:space:]]*Default::default\(\)[[:space:]]*\}' "Functions returning only Default::default()" "default_only" || true
+check_pattern '\{[[:space:]]*Default::default\(\)[[:space:]]*\}' "Functions returning only Default::default()" "default_only" true || true
 
 echo -e "${BLUE}=== Checking for suppressed warnings ===${NC}"
 echo ""
 
 # Check for #[allow(unused)] that might hide incomplete code
-check_pattern '#\[allow\(unused' "#[allow(unused)] attributes" "allow_unused" || true
+check_pattern '#\[allow\(unused' "#[allow(unused)] attributes" "allow_unused" true || true
 
 # Check for #[allow(dead_code)]
-check_pattern '#\[allow\(dead_code' "#[allow(dead_code)] attributes" "allow_dead" || true
+check_pattern '#\[allow\(dead_code' "#[allow(dead_code)] attributes" "allow_dead" true || true
 
 echo -e "${BLUE}=== Checking for hardcoded return values ===${NC}"
 echo ""
 
-# Check for suspicious hardcoded returns (common stub patterns)
-# Look for functions that just return literals
+HARDCODED_COUNT=0
 for file in $SRC_FILES; do
     # Skip test files
-    if [[ "$file" =~ test ]]; then
+    if [[ "$file" =~ (test|tests|_test\.rs) ]]; then
         continue
     fi
 
-    # Check for functions returning hardcoded true/false
-    hardcoded=$(grep -nE 'fn[[:space:]]+[a-z_]+.*->.*bool[^{]*\{[[:space:]]*(true|false)[[:space:]]*\}' "$file" 2>/dev/null || true)
-    if [[ -n "$hardcoded" ]]; then
+    # Check for functions returning hardcoded true/false (single-line)
+    hardcoded_bool=$(grep -nE 'fn[[:space:]]+[a-z_]+.*->[[:space:]]*(bool|Bool)[^{]*\{[[:space:]]*(true|false)[[:space:]]*\}' "$file" 2>/dev/null || true)
+    if [[ -n "$hardcoded_bool" ]]; then
         while IFS= read -r match; do
             if [[ -n "$match" ]]; then
                 echo -e "  ${YELLOW}$file:$match${NC}"
-                TOTAL_ISSUES=$((TOTAL_ISSUES + 1))
-                ISSUES_BY_TYPE["hardcoded"]=$((${ISSUES_BY_TYPE["hardcoded"]:-0} + 1))
+                ISSUES_LIST+=("$file:$match [hardcoded bool]")
+                HARDCODED_COUNT=$((HARDCODED_COUNT + 1))
             fi
-        done <<< "$hardcoded"
+        done <<< "$hardcoded_bool"
     fi
 
-    # Check for functions returning 0 or empty values
-    hardcoded_zero=$(grep -nE 'fn[[:space:]]+[a-z_]+.*->[^{]*\{[[:space:]]*(0|""|vec!\[\]|\[\])[[:space:]]*\}' "$file" 2>/dev/null || true)
+    # Check for functions returning 0 or empty collections
+    hardcoded_zero=$(grep -nE 'fn[[:space:]]+[a-z_]+.*->[^{]*\{[[:space:]]*(0|""|vec!\[\]|\[\]|None)[[:space:]]*\}' "$file" 2>/dev/null || true)
     if [[ -n "$hardcoded_zero" ]]; then
         while IFS= read -r match; do
             if [[ -n "$match" ]]; then
                 echo -e "  ${YELLOW}$file:$match${NC}"
-                TOTAL_ISSUES=$((TOTAL_ISSUES + 1))
-                ISSUES_BY_TYPE["hardcoded"]=$((${ISSUES_BY_TYPE["hardcoded"]:-0} + 1))
+                ISSUES_LIST+=("$file:$match [hardcoded value]")
+                HARDCODED_COUNT=$((HARDCODED_COUNT + 1))
             fi
         done <<< "$hardcoded_zero"
     fi
+
+    # Check for return true; return false; return 0; at start of function
+    simple_return=$(grep -nE '^\s*return\s+(true|false|0|vec!\[\]|\[\]);?\s*$' "$file" 2>/dev/null || true)
+    if [[ -n "$simple_return" ]]; then
+        while IFS= read -r match; do
+            if [[ -n "$match" ]]; then
+                line_num=$(echo "$match" | cut -d: -f1)
+                # Check context - is this the only statement in a function?
+                context_before=$(sed -n "$((line_num > 5 ? line_num - 5 : 1)),$((line_num - 1))p" "$file" 2>/dev/null | grep -c "fn " || echo "0")
+                context_after=$(sed -n "$((line_num + 1)),$((line_num + 2))p" "$file" 2>/dev/null | grep -c "}" || echo "0")
+                if [[ $context_before -gt 0 ]] && [[ $context_after -gt 0 ]]; then
+                    echo -e "  ${YELLOW}$file:$match${NC}"
+                    ISSUES_LIST+=("$file:$match [simple return]")
+                    HARDCODED_COUNT=$((HARDCODED_COUNT + 1))
+                fi
+            fi
+        done <<< "$simple_return"
+    fi
 done
+
+if [[ $HARDCODED_COUNT -gt 0 ]]; then
+    echo -e "${RED}Hardcoded return values ($HARDCODED_COUNT found)${NC}"
+    TOTAL_ISSUES=$((TOTAL_ISSUES + HARDCODED_COUNT))
+    ISSUES_BY_TYPE["hardcoded"]=$((${ISSUES_BY_TYPE["hardcoded"]:-0} + HARDCODED_COUNT))
+fi
 echo ""
 
 # Summary
 echo "================================"
-echo "Stub Detection Summary:"
+echo -e "${BLUE}Stub Detection Summary${NC}"
 echo ""
 
 if [[ ${#ISSUES_BY_TYPE[@]} -gt 0 ]]; then
+    echo "Issues by type:"
     for issue_type in "${!ISSUES_BY_TYPE[@]}"; do
         count="${ISSUES_BY_TYPE[$issue_type]}"
         case "$issue_type" in

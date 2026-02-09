@@ -102,7 +102,7 @@ check_interface_modifications() {
     return 0
 }
 
-# Resolve conflicts using helper scripts
+# List conflicted files for manual resolution
 resolve_conflicts() {
     local conflicted_files
     conflicted_files=$(git diff --name-only --diff-filter=U)
@@ -111,52 +111,17 @@ resolve_conflicts() {
         return 0
     fi
 
-    echo "Attempting to resolve conflicts..."
+    echo "Conflicts detected - manual resolution required:"
+    echo "$conflicted_files" | sed 's/^/  - /'
+    echo ""
+    echo "Please resolve conflicts using git commands:"
+    echo "  git diff --name-only --diff-filter=U  # List conflicted files"
+    echo "  git checkout --ours <file>            # Keep our version"
+    echo "  git checkout --theirs <file>          # Keep their version"
+    echo "  # Or manually edit the file to merge changes"
+    echo "  git add <file>                        # Mark as resolved"
 
-    local unresolved=()
-
-    while IFS= read -r file; do
-        case "$file" in
-            Cargo.toml|*/Cargo.toml)
-                echo "  Resolving Cargo.toml conflict: $file"
-                if $DRY_RUN; then
-                    echo "    [DRY-RUN] Would run: resolve_cargo_conflict.py $file"
-                else
-                    if "$SCRIPT_DIR/resolve_cargo_conflict.py" "$file"; then
-                        git add "$file"
-                        echo "    Resolved!"
-                    else
-                        unresolved+=("$file")
-                    fi
-                fi
-                ;;
-            lib.rs|*/lib.rs)
-                echo "  Resolving lib.rs conflict: $file"
-                if $DRY_RUN; then
-                    echo "    [DRY-RUN] Would run: resolve_librs_conflict.py $file"
-                else
-                    if "$SCRIPT_DIR/resolve_librs_conflict.py" "$file"; then
-                        git add "$file"
-                        echo "    Resolved!"
-                    else
-                        unresolved+=("$file")
-                    fi
-                fi
-                ;;
-            *)
-                unresolved+=("$file")
-                ;;
-        esac
-    done <<< "$conflicted_files"
-
-    if [[ ${#unresolved[@]} -gt 0 ]]; then
-        echo ""
-        echo "Unresolved conflicts:"
-        printf '  - %s\n' "${unresolved[@]}"
-        return 1
-    fi
-
-    return 0
+    return 1
 }
 
 # Process each worktree
