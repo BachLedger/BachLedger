@@ -16,6 +16,7 @@
 8. [合约调用](#8-合约调用)
 9. [状态查询](#9-状态查询)
 10. [常见问题](#10-常见问题)
+11. [完整测试示例: Counter 合约](#11-完整测试示例-counter-合约)
 
 ---
 
@@ -867,6 +868,238 @@ curl -X POST http://127.0.0.1:8545 \
 **可能原因**:
 - 节点未出块 (检查验证者配置)
 - 网络分区 (检查节点连接)
+
+---
+
+## 11. 完整测试示例: Counter 合约
+
+本节通过一个完整的 Counter 合约示例，演示从编写、编译、部署到调用的全流程。
+
+### 11.1 编写 Solidity 合约
+
+创建 `contracts/Counter.sol`:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/**
+ * @title Counter
+ * @dev A simple counter contract for demonstrating state changes
+ */
+contract Counter {
+    uint256 private _count;
+
+    event CounterIncremented(uint256 newValue);
+    event CounterDecremented(uint256 newValue);
+    event CounterReset(uint256 previousValue);
+
+    constructor() {
+        _count = 0;
+    }
+
+    function increment() public {
+        _count += 1;
+        emit CounterIncremented(_count);
+    }
+
+    function decrement() public {
+        require(_count > 0, "Counter: cannot decrement below zero");
+        _count -= 1;
+        emit CounterDecremented(_count);
+    }
+
+    function reset() public {
+        uint256 previousValue = _count;
+        _count = 0;
+        emit CounterReset(previousValue);
+    }
+
+    function get() public view returns (uint256) {
+        return _count;
+    }
+
+    function add(uint256 value) public {
+        _count += value;
+        emit CounterIncremented(_count);
+    }
+}
+```
+
+### 11.2 安装 Solidity 编译器
+
+```bash
+# 使用 solc-select 安装指定版本
+pip3 install solc-select
+solc-select install 0.8.20
+solc-select use 0.8.20
+
+# 验证安装
+~/.solc-select/artifacts/solc-0.8.20/solc-0.8.20 --version
+```
+
+### 11.3 编译合约
+
+```bash
+cd contracts
+
+# 编译并输出 bytecode 和 ABI
+~/.solc-select/artifacts/solc-0.8.20/solc-0.8.20 \
+    --bin --abi Counter.sol -o ./build --overwrite
+
+# 查看编译结果
+ls -la build/
+# Counter.abi  Counter.bin
+```
+
+### 11.4 部署合约
+
+```bash
+# 设置测试账户余额
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0",
+    "method":"eth_setBalance",
+    "params":["0x1234567890123456789012345678901234567890", "0x56BC75E2D63100000"],
+    "id":1
+  }'
+# 响应: {"jsonrpc":"2.0","id":1,"result":true}
+
+# 部署合约 (bytecode 从 build/Counter.bin 获取)
+BYTECODE=$(cat build/Counter.bin)
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_sendTransaction\",
+    \"params\":[{
+      \"from\":\"0x1234567890123456789012345678901234567890\",
+      \"data\":\"0x$BYTECODE\",
+      \"gas\":\"0x100000\"
+    }],
+    \"id\":1
+  }"
+# 响应: {"jsonrpc":"2.0","id":1,"result":"0x...transaction_hash..."}
+
+# 查看节点日志获取合约地址
+docker logs bachledger-node1 2>&1 | grep "Contract deployed"
+# Contract deployed at Address([248, 49, 222, 80, ...])
+```
+
+### 11.5 验证合约代码
+
+```bash
+CONTRACT="0xf831de50f3884cf0f8550bb129032a80cb5a26b7"
+
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_getCode\",
+    \"params\":[\"$CONTRACT\", \"latest\"],
+    \"id\":1
+  }"
+# 响应: {"jsonrpc":"2.0","id":1,"result":"0x6080604052..."}
+```
+
+### 11.6 函数选择器
+
+| 函数 | 选择器 |
+|------|--------|
+| `get()` | `0x6d4ce63c` |
+| `increment()` | `0xd09de08a` |
+| `decrement()` | `0x2baeceb7` |
+| `reset()` | `0xd826f88f` |
+| `add(uint256)` | `0x1003e2d2` |
+
+### 11.7 调用合约并验证状态变化
+
+```bash
+CONTRACT="0xf831de50f3884cf0f8550bb129032a80cb5a26b7"
+FROM="0x1234567890123456789012345678901234567890"
+
+# 1. 查询初始值
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_call\",
+    \"params\":[{\"to\":\"$CONTRACT\",\"data\":\"0x6d4ce63c\"}, \"latest\"],
+    \"id\":1
+  }"
+# 结果: 0x0000000000000000000000000000000000000000000000000000000000000000
+# 解码: 0 (初始值)
+
+# 2. 调用 increment()
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_sendTransaction\",
+    \"params\":[{
+      \"from\":\"$FROM\",
+      \"to\":\"$CONTRACT\",
+      \"data\":\"0xd09de08a\",
+      \"gas\":\"0x10000\"
+    }],
+    \"id\":1
+  }"
+
+# 3. 再次查询
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_call\",
+    \"params\":[{\"to\":\"$CONTRACT\",\"data\":\"0x6d4ce63c\"}, \"latest\"],
+    \"id\":1
+  }"
+# 结果: 0x0000000000000000000000000000000000000000000000000000000000000001
+# 解码: 1 (increment 后)
+
+# 4. 调用 add(10)
+# add(10) = 0x1003e2d2 + 参数编码
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_sendTransaction\",
+    \"params\":[{
+      \"from\":\"$FROM\",
+      \"to\":\"$CONTRACT\",
+      \"data\":\"0x1003e2d2000000000000000000000000000000000000000000000000000000000000000a\",
+      \"gas\":\"0x10000\"
+    }],
+    \"id\":1
+  }"
+
+# 5. 最终查询
+curl -s -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\":\"2.0\",
+    \"method\":\"eth_call\",
+    \"params\":[{\"to\":\"$CONTRACT\",\"data\":\"0x6d4ce63c\"}, \"latest\"],
+    \"id\":1
+  }"
+# 结果: 0x000000000000000000000000000000000000000000000000000000000000000b
+# 解码: 11 (1 + 10)
+```
+
+### 11.8 测试结果汇总
+
+| 操作 | 状态值 |
+|------|--------|
+| 初始状态 | 0 |
+| increment() | 1 |
+| add(10) | 11 |
+
+节点日志显示事件触发:
+```
+Contract call result: ExecutionResult { success: true, gas_used: 21985, logs: [Log { topics: [CounterIncremented], data: [1] }] }
+Contract call result: ExecutionResult { success: true, gas_used: 7177, logs: [Log { topics: [CounterIncremented], data: [11] }] }
+```
 
 ---
 
