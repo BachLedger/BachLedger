@@ -83,9 +83,8 @@ impl PrivateKey {
 
     /// Signs a message hash.
     pub fn sign(&self, message: &H256) -> Signature {
-        // Use prehashed signing with Keccak256 digest
-        let digest = Keccak256::new_with_prefix(message.as_bytes());
-        let (sig, recovery_id) = self.inner.sign_digest_recoverable(digest)
+        // Message is already a hash - use prehash signing (no double-hashing)
+        let (sig, recovery_id) = self.inner.sign_prehash_recoverable(message.as_bytes())
             .expect("signing should not fail with valid key");
 
         Signature::from_k256_signature(&sig, recovery_id)
