@@ -50,6 +50,7 @@ pub fn keccak256_concat(data: &[&[u8]]) -> H256 {
 }
 
 /// A secp256k1 private key (32 bytes).
+#[derive(Clone)]
 pub struct PrivateKey {
     inner: SigningKey,
 }
