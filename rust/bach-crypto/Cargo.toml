@@ -2,6 +2,11 @@
 name = "bach-crypto"
 version = "0.1.0"
 edition = "2021"
+description = "Cryptographic primitives for BachLedger: Keccak256, ECDSA signatures"
+license = "MIT"
 
 [dependencies]
 bach-primitives = { path = "../bach-primitives" }
+
+[dev-dependencies]
+hex = "0.4"
