@@ -10,9 +10,6 @@
 
 **BachLedger: Orchestrating Parallel Execution with Dynamic Dependency Detection and Seamless Scheduling**
 
-- 发表于: IEEE ICPADS 2024 (第30届国际并行与分布式系统会议)
-- DOI: [10.1109/ICPADS63350.2024.00087](https://doi.org/10.1109/ICPADS63350.2024.00087)
-
 ### 1.2 复现目标
 
 基于论文描述，用 Rust 从零实现一个完整的医疗区块链系统：
