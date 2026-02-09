@@ -1,0 +1,5 @@
+# Ignore all key files - NEVER commit private keys
+*.key
+*.pem
+*.json
+!.gitignore

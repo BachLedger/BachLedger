@@ -1,0 +1,158 @@
+version: '3.8'
+
+# BachLedger Medical Blockchain - Multi-Node Deployment
+# 4-node TBFT validator network for development/testing
+
+x-node-common: &node-common
+  build:
+    context: ..
+    dockerfile: deployment/Dockerfile
+  networks:
+    - bachledger
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "100m"
+      max-file: "3"
+
+services:
+  # ============================================================================
+  # Node 1 - Primary bootstrap node
+  # ============================================================================
+  node1:
+    <<: *node-common
+    container_name: bachledger-node1
+    hostname: node1
+    ports:
+      - "8545:8545"   # JSON-RPC HTTP
+      - "8546:8546"   # JSON-RPC WebSocket
+      - "30303:30303" # P2P TCP
+      - "30303:30303/udp" # P2P UDP
+    environment:
+      - NODE_ID=1
+      - NODE_NAME=validator-1
+      - VALIDATOR_KEY_FILE=/keys/validator1.key
+      - P2P_PORT=30303
+      - RPC_PORT=8545
+      - WS_PORT=8546
+      - BOOTSTRAP_NODES=
+      - LOG_LEVEL=info
+      - DATA_DIR=/data
+      - GENESIS_FILE=/config/genesis.json
+    volumes:
+      - ./data/node1:/data
+      - ./keys:/keys:ro
+      - ./genesis.json:/config/genesis.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # Node 2
+  # ============================================================================
+  node2:
+    <<: *node-common
+    container_name: bachledger-node2
+    hostname: node2
+    ports:
+      - "8547:8545"   # JSON-RPC HTTP
+      - "8548:8546"   # JSON-RPC WebSocket
+      - "30304:30303" # P2P TCP
+      - "30304:30303/udp" # P2P UDP
+    environment:
+      - NODE_ID=2
+      - NODE_NAME=validator-2
+      - VALIDATOR_KEY_FILE=/keys/validator2.key
+      - P2P_PORT=30303
+      - RPC_PORT=8545
+      - WS_PORT=8546
+      - BOOTSTRAP_NODES=node1:30303
+      - LOG_LEVEL=info
+      - DATA_DIR=/data
+      - GENESIS_FILE=/config/genesis.json
+    volumes:
+      - ./data/node2:/data
+      - ./keys:/keys:ro
+      - ./genesis.json:/config/genesis.json:ro
+    depends_on:
+      node1:
+        condition: service_healthy
+
+  # ============================================================================
+  # Node 3
+  # ============================================================================
+  node3:
+    <<: *node-common
+    container_name: bachledger-node3
+    hostname: node3
+    ports:
+      - "8549:8545"   # JSON-RPC HTTP
+      - "8550:8546"   # JSON-RPC WebSocket
+      - "30305:30303" # P2P TCP
+      - "30305:30303/udp" # P2P UDP
+    environment:
+      - NODE_ID=3
+      - NODE_NAME=validator-3
+      - VALIDATOR_KEY_FILE=/keys/validator3.key
+      - P2P_PORT=30303
+      - RPC_PORT=8545
+      - WS_PORT=8546
+      - BOOTSTRAP_NODES=node1:30303,node2:30303
+      - LOG_LEVEL=info
+      - DATA_DIR=/data
+      - GENESIS_FILE=/config/genesis.json
+    volumes:
+      - ./data/node3:/data
+      - ./keys:/keys:ro
+      - ./genesis.json:/config/genesis.json:ro
+    depends_on:
+      node1:
+        condition: service_healthy
+
+  # ============================================================================
+  # Node 4
+  # ============================================================================
+  node4:
+    <<: *node-common
+    container_name: bachledger-node4
+    hostname: node4
+    ports:
+      - "8551:8545"   # JSON-RPC HTTP
+      - "8552:8546"   # JSON-RPC WebSocket
+      - "30306:30303" # P2P TCP
+      - "30306:30303/udp" # P2P UDP
+    environment:
+      - NODE_ID=4
+      - NODE_NAME=validator-4
+      - VALIDATOR_KEY_FILE=/keys/validator4.key
+      - P2P_PORT=30303
+      - RPC_PORT=8545
+      - WS_PORT=8546
+      - BOOTSTRAP_NODES=node1:30303,node2:30303,node3:30303
+      - LOG_LEVEL=info
+      - DATA_DIR=/data
+      - GENESIS_FILE=/config/genesis.json
+    volumes:
+      - ./data/node4:/data
+      - ./keys:/keys:ro
+      - ./genesis.json:/config/genesis.json:ro
+    depends_on:
+      node1:
+        condition: service_healthy
+
+networks:
+  bachledger:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:
+  node4-data:
