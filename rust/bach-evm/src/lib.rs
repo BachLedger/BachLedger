@@ -56,7 +56,7 @@ pub const GAS_EXTCODE: u64 = 700;
 // =============================================================================
 
 #[allow(dead_code)]
-mod opcode {
+pub mod opcode {
     // Stop and Arithmetic
     pub const STOP: u8 = 0x00;
     pub const ADD: u8 = 0x01;
