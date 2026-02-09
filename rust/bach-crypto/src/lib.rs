@@ -7,10 +7,8 @@
 //! - `Signature`: ECDSA signature with recovery ID
 
 use bach_primitives::{Address, H256, ADDRESS_LENGTH};
-use k256::ecdsa::{
-    RecoveryId, Signature as K256Signature, SigningKey, VerifyingKey,
-    signature::DigestVerifier,
-};
+use k256::ecdsa::{RecoveryId, Signature as K256Signature, SigningKey, VerifyingKey};
+use k256::ecdsa::signature::hazmat::PrehashVerifier;
 use sha3::{Digest, Keccak256};
 
 /// Length of a signature in bytes (r=32 + s=32 + v=1)
@@ -239,8 +237,8 @@ impl Signature {
             Err(_) => return false,
         };
 
-        let digest = Keccak256::new_with_prefix(message.as_bytes());
-        verifying_key.verify_digest(digest, &k256_sig).is_ok()
+        // Message is already a hash - use prehash verification (no double-hashing)
+        verifying_key.verify_prehash(message.as_bytes(), &k256_sig).is_ok()
     }
 
     /// Recovers the public key from the signature and message.
@@ -257,8 +255,8 @@ impl Signature {
         let recovery_id = RecoveryId::try_from(v.saturating_sub(27))
             .map_err(|_| CryptoError::RecoveryFailed)?;
 
-        let digest = Keccak256::new_with_prefix(message.as_bytes());
-        let recovered_key = VerifyingKey::recover_from_digest(digest, &k256_sig, recovery_id)
+        // Message is already a hash - use prehash recovery (no double-hashing)
+        let recovered_key = VerifyingKey::recover_from_prehash(message.as_bytes(), &k256_sig, recovery_id)
             .map_err(|_| CryptoError::RecoveryFailed)?;
 
         Ok(PublicKey::from_verifying_key(&recovered_key))
