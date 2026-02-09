@@ -94,6 +94,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bach-contracts"
+version = "0.1.0"
+dependencies = [
+ "bach-crypto",
+ "bach-evm",
+ "bach-primitives",
+ "hex",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "bach-crypto"
 version = "0.1.0"
 dependencies = [

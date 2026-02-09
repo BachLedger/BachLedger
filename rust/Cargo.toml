@@ -13,4 +13,5 @@ members = [
     "bach-storage",
     "bach-rpc",
     "bach-node",
+    "bach-contracts",
 ]
