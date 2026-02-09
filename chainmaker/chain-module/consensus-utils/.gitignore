@@ -1,6 +1,0 @@
-.idea
-.DS_Store
-wal_service/wal.log/
-testframework/*.log
-testframework/*.log.*
-testframework/config_tmp/

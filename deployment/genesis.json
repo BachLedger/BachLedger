@@ -1,0 +1,99 @@
+{
+  "config": {
+    "chainId": 31337,
+    "chainName": "BachLedger Medical Blockchain",
+    "consensus": {
+      "type": "tbft",
+      "blockTime": 3000,
+      "validators": [
+        {
+          "address": "0x14dcf07a2302449e945135cbfd10eb9efca955a1",
+          "publicKey": "0x04d54316ba67c03078fd860888e4311ccdb4ebdf8b6a84051af3444767c46bd44d60f4ebbfec17fc60672f31d04a414e1fbdefa38e2c18a0fecbae95571ea1e15b",
+          "power": 100
+        },
+        {
+          "address": "0xc2138e6e6ebf96d5a58fa4e116a3fa7d719fc1c6",
+          "publicKey": "0x04341d80530710a57ed6c3b4bd57d0ceea2c0c1de81149e3cea4797a5bbd366ad53ebdfb9a0af712ddfb9d3e6a9ff1aee072caaad974bc2eab5cf7ad1526145157",
+          "power": 100
+        },
+        {
+          "address": "0x9e433d7512ba7fd4ba01f40a1c4bd42aebf06c46",
+          "publicKey": "0x0431cb996f10728b5e0a37f3ee3961cd9aab30a33c0659b7fea7c0a13935bfe1ff6ce500efa34ee0e69a07fed120eaf44e90672b1dd2618acd7ee281fe9f302525",
+          "power": 100
+        },
+        {
+          "address": "0x4538ef84cbdef8d8da765e9ee78d0b1109c1de94",
+          "publicKey": "0x048ddb97d6ebe8726741d9eac0cf1bc2dd0f4b8427d3790c3822728aef660e985e674b3c8c38ba76904a2b72fe8d88ac300a38cf0eda527eacf6017886a1341a40",
+          "power": 100
+        }
+      ],
+      "proposerPolicy": "roundRobin",
+      "epochLength": 100
+    },
+    "scheduling": {
+      "type": "seamless",
+      "maxConcurrentTx": 1000,
+      "conflictDetection": true
+    }
+  },
+  "nonce": "0x0",
+  "timestamp": "0x0",
+  "extraData": "0x42616368204c65646765722047656e65736973",
+  "gasLimit": "0x1c9c380",
+  "difficulty": "0x1",
+  "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "coinbase": "0x0000000000000000000000000000000000000000",
+  "alloc": {
+    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Development account 1 - 100 ETH"
+    },
+    "0x70997970C51812dc3A010C7d01b50e0d17dc79C8": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Development account 2 - 100 ETH"
+    },
+    "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Development account 3 - 100 ETH"
+    },
+    "0x90F79bf6EB2c4f870365E785982E1f101E93b906": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Development account 4 - 100 ETH"
+    },
+    "0x14dcf07a2302449e945135cbfd10eb9efca955a1": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Validator 1 - 100 ETH"
+    },
+    "0xc2138e6e6ebf96d5a58fa4e116a3fa7d719fc1c6": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Validator 2 - 100 ETH"
+    },
+    "0x9e433d7512ba7fd4ba01f40a1c4bd42aebf06c46": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Validator 3 - 100 ETH"
+    },
+    "0x4538ef84cbdef8d8da765e9ee78d0b1109c1de94": {
+      "balance": "0x56BC75E2D63100000",
+      "comment": "Validator 4 - 100 ETH"
+    },
+    "0x0000000000000000000000000000000000001000": {
+      "balance": "0x0",
+      "code": "0x",
+      "comment": "Medical Records Registry (placeholder)"
+    },
+    "0x0000000000000000000000000000000000001001": {
+      "balance": "0x0",
+      "code": "0x",
+      "comment": "Access Control Registry (placeholder)"
+    },
+    "0x0000000000000000000000000000000000001002": {
+      "balance": "0x0",
+      "code": "0x",
+      "comment": "Audit Log Registry (placeholder)"
+    }
+  },
+  "number": "0x0",
+  "gasUsed": "0x0",
+  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "baseFeePerGas": "0x3b9aca00"
+}

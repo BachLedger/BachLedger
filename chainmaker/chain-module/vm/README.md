@@ -1,1 +1,0 @@
-Vm is a module for managing all vms(vm-wasmer, vm-evm, vm-gasm and vm-wxvm). It provides the interface for running contracts.

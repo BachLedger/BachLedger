@@ -1,0 +1,10 @@
+# Data directories - don't commit node data
+data/
+
+# Key files - NEVER commit private keys
+keys/*.key
+keys/*.pem
+
+# Temporary files
+*.tmp
+*.log

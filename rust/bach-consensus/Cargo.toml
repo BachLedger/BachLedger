@@ -1,0 +1,11 @@
+[package]
+name = "bach-consensus"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bach-primitives = { path = "../bach-primitives" }
+bach-crypto = { path = "../bach-crypto" }
+bach-types = { path = "../bach-types" }
+
+[dev-dependencies]

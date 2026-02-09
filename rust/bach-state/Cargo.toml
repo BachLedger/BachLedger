@@ -1,0 +1,8 @@
+[package]
+name = "bach-state"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bach-primitives = { path = "../bach-primitives" }
+bach-types = { path = "../bach-types" }
