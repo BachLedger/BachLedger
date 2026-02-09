@@ -9,70 +9,60 @@
 | Hardcoded Returns | PASS | 0 |
 | Unwrap Abuse | MINOR | 5 |
 | Interface Drift | PASS | 0 |
-| Logic Correctness | MAJOR | 1 |
+| Logic Correctness | PASS | 0 |
 | Security | PASS | 0 |
 
-**Overall**: NEEDS_REVISION
+**Overall**: APPROVED
 
-## Issues
+## Revision History
 
-### Issue #1: Incorrect Message Hashing in Sign/Verify/Recover
-- **File**: `/Users/moonshot/dev/working/bachledger/rust/bach-crypto/src/lib.rs`
-- **Lines**: 87, 243, 261
-- **Severity**: MAJOR
-- **Description**: The code applies an extra Keccak256 hash to the message during sign/verify/recover operations. The interface contract states that `message` is already a "32-byte message hash (NOT the raw message)", but the implementation uses `Keccak256::new_with_prefix(message.as_bytes())` which hashes the already-hashed message again.
+| Date | Verdict | Notes |
+|------|---------|-------|
+| 2026-02-09 | NEEDS_REVISION | Initial review - double-hashing issue |
+| 2026-02-09 | APPROVED | Fix verified (commit f0d495e) - prehash methods now used |
 
-  This results in:
-  - Signing: `sign(H(data))` actually signs `H(H(data))`
-  - Verifying: `verify(H(data))` verifies against `H(H(data))`
-  - Recovery: `recover(H(data))` recovers from `H(H(data))`
+## Fixed Issue (Previously MAJOR)
 
-  While internally consistent (sign/verify/recover all apply the same double-hash), this deviates from the standard Ethereum signing behavior where the message hash is signed directly without additional hashing.
+### Issue #1: Message Hashing - RESOLVED
+- **Status**: FIXED in commit f0d495e
+- **Original Problem**: Code applied extra Keccak256 hash during sign/verify/recover
+- **Fix Applied**: Now uses prehash variants:
+  - Line 85: `sign_prehash_recoverable(message.as_bytes())`
+  - Line 241: `verify_prehash(message.as_bytes(), &k256_sig)`
+  - Line 259: `recover_from_prehash(message.as_bytes(), &k256_sig, recovery_id)`
+- Added import: `use k256::ecdsa::signature::hazmat::PrehashVerifier;`
 
-- **Fix**: Use the k256 `prehash` variants that accept the raw 32-byte hash directly without additional hashing:
-  ```rust
-  // For signing:
-  let (sig, recovery_id) = self.inner.sign_prehash_recoverable(message.as_bytes())
-      .expect("signing should not fail with valid key");
-
-  // For verifying:
-  use k256::ecdsa::signature::hazmat::PrehashVerifier;
-  verifying_key.verify_prehash(message.as_bytes(), &k256_sig).is_ok()
-
-  // For recovery:
-  VerifyingKey::recover_from_prehash(message.as_bytes(), &k256_sig, recovery_id)
-  ```
+## Minor Issues (Non-blocking)
 
 ### Issue #2: Unwrap in `Signature::from_bytes` (safe)
-- **File**: line 211-212
+- **File**: line 208-209
 - **Severity**: MINOR
 - **Description**: `try_into().unwrap()` for array conversion from slice
-- **Justification**: These unwraps are safe - the slices are exactly 32 bytes by construction
-- **Recommendation**: Consider using array indexing pattern or explicit match for documentation
+- **Justification**: Safe - slices are exactly 32 bytes by construction
 
 ### Issue #3: Unwrap in `Signature::verify` (safe)
-- **File**: lines 233-234
+- **File**: lines 230-231
 - **Severity**: MINOR
 - **Description**: Same `try_into().unwrap()` pattern
 - **Justification**: Safe - extracting from fixed-size internal array
 
 ### Issue #4: Unwrap in `Signature::recover` (safe)
-- **File**: lines 249-250
+- **File**: lines 246-247
 - **Severity**: MINOR
 - **Description**: Same pattern
 - **Justification**: Safe for same reason
 
 ### Issue #5: Unwrap in `Signature::r()` and `Signature::s()`
-- **File**: lines 270, 275
+- **File**: lines 267, 272
 - **Severity**: MINOR
 - **Description**: `try_into().unwrap()` for returning references
 - **Justification**: Safe - internal array is always 65 bytes
 
 ### Issue #6: Expect in `PrivateKey::sign`
-- **File**: line 88-89
+- **File**: line 85-86
 - **Severity**: MINOR
 - **Description**: Uses `.expect("signing should not fail with valid key")`
-- **Justification**: This is acceptable - if the signing key is valid (enforced by construction), signing cannot fail. The message provides clear context.
+- **Justification**: Acceptable - signing key validity enforced by construction
 
 ## Interface Drift Analysis
 
@@ -94,7 +84,7 @@
 - `from_bytes(&[u8; 32]) -> Result<Self, CryptoError>` - **matches**
 - `to_bytes() -> [u8; 32]` - **matches**
 - `public_key() -> PublicKey` - **matches**
-- `sign(&self, message: &H256) -> Signature` - **matches signature, logic issue noted**
+- `sign(&self, message: &H256) -> Signature` - **matches**
 - `Debug` impl redacts bytes - **matches security requirement**
 
 ### PublicKey
@@ -123,9 +113,9 @@
 
 ### Signature Validation
 **Status: PASS**
-- `from_bytes` validates r and s are non-zero (line 200-202)
-- Validates v is 27 or 28 (lines 206-208)
-- Validates r,s are valid scalars via `K256Signature::from_scalars` (lines 213-216)
+- `from_bytes` validates r and s are non-zero (lines 197-199)
+- Validates v is 27 or 28 (lines 202-205)
+- Validates r,s are valid scalars via `K256Signature::from_scalars` (lines 210-213)
 - Strict validation prevents malleability attacks
 
 ### Timing Side-Channels
@@ -136,9 +126,8 @@
 
 ### Key Material Handling
 **Status: PASS**
-- `PrivateKey::Debug` redacts key bytes (line 98)
+- `PrivateKey::Debug` redacts key bytes (line 95)
 - No logging of secret material
-- Note: Does not implement `Zeroize` trait (mentioned in contract but not required)
 
 ## Logic Correctness
 
@@ -160,7 +149,7 @@
 - Correctly converts recovery_id to Ethereum v (adds 27)
 
 ### Signature Recovery
-- Correctly subtracts 27 from v to get recovery_id (line 258)
+- Correctly subtracts 27 from v to get recovery_id (line 255)
 - Uses `saturating_sub` to prevent underflow
 
 ## Positive Observations
@@ -172,15 +161,14 @@
 5. **Clean architecture**: Wraps k256 types appropriately
 6. **Point validation**: `PublicKey::from_bytes` validates the point is on the curve
 7. **Ethereum compatibility**: v values use 27/28 convention
+8. **Correct prehash usage**: Sign/verify/recover use prehash variants for proper message handling
 
 ## Conclusion
 
-The bach-crypto implementation is well-structured with proper error handling and security practices. However, there is one **MAJOR issue** with the message hashing - the code applies an extra Keccak256 hash during sign/verify/recover operations. While internally consistent (all operations apply the same extra hash), this deviates from standard Ethereum signing behavior.
-
-**Recommendation**: Fix the message hashing to use prehash variants that accept the 32-byte hash directly without additional hashing. This is required for interoperability with Ethereum tooling and wallets.
+The bach-crypto implementation is complete, correct, and secure. The initial double-hashing issue has been fixed - the code now correctly uses prehash variants (`sign_prehash_recoverable`, `verify_prehash`, `recover_from_prehash`) that accept the pre-computed message hash directly without additional hashing. This ensures Ethereum compatibility and interoperability with standard tooling.
 
 ---
 
 **Reviewer**: Reviewer-Logic
 **Date**: 2026-02-09
-**Verdict**: NEEDS_REVISION (1 MAJOR issue)
+**Verdict**: APPROVED
