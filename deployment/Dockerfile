@@ -27,6 +27,7 @@ COPY rust/bach-consensus ./bach-consensus
 COPY rust/bach-rpc ./bach-rpc
 COPY rust/bach-scheduler ./bach-scheduler
 COPY rust/bach-state ./bach-state
+COPY rust/bach-contracts ./bach-contracts
 COPY rust/bach-node ./bach-node
 
 # Build release binary

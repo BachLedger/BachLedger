@@ -7,23 +7,23 @@
       "blockTime": 3000,
       "validators": [
         {
-          "address": "0x1000000000000000000000000000000000000001",
-          "publicKey": "0x04validator1_public_key_placeholder_64bytes_hex",
+          "address": "0x14dcf07a2302449e945135cbfd10eb9efca955a1",
+          "publicKey": "0x04d54316ba67c03078fd860888e4311ccdb4ebdf8b6a84051af3444767c46bd44d60f4ebbfec17fc60672f31d04a414e1fbdefa38e2c18a0fecbae95571ea1e15b",
           "power": 100
         },
         {
-          "address": "0x1000000000000000000000000000000000000002",
-          "publicKey": "0x04validator2_public_key_placeholder_64bytes_hex",
+          "address": "0xc2138e6e6ebf96d5a58fa4e116a3fa7d719fc1c6",
+          "publicKey": "0x04341d80530710a57ed6c3b4bd57d0ceea2c0c1de81149e3cea4797a5bbd366ad53ebdfb9a0af712ddfb9d3e6a9ff1aee072caaad974bc2eab5cf7ad1526145157",
           "power": 100
         },
         {
-          "address": "0x1000000000000000000000000000000000000003",
-          "publicKey": "0x04validator3_public_key_placeholder_64bytes_hex",
+          "address": "0x9e433d7512ba7fd4ba01f40a1c4bd42aebf06c46",
+          "publicKey": "0x0431cb996f10728b5e0a37f3ee3961cd9aab30a33c0659b7fea7c0a13935bfe1ff6ce500efa34ee0e69a07fed120eaf44e90672b1dd2618acd7ee281fe9f302525",
           "power": 100
         },
         {
-          "address": "0x1000000000000000000000000000000000000004",
-          "publicKey": "0x04validator4_public_key_placeholder_64bytes_hex",
+          "address": "0x4538ef84cbdef8d8da765e9ee78d0b1109c1de94",
+          "publicKey": "0x048ddb97d6ebe8726741d9eac0cf1bc2dd0f4b8427d3790c3822728aef660e985e674b3c8c38ba76904a2b72fe8d88ac300a38cf0eda527eacf6017886a1341a40",
           "power": 100
         }
       ],
@@ -60,19 +60,19 @@
       "balance": "0x56BC75E2D63100000",
       "comment": "Development account 4 - 100 ETH"
     },
-    "0x1000000000000000000000000000000000000001": {
+    "0x14dcf07a2302449e945135cbfd10eb9efca955a1": {
       "balance": "0x56BC75E2D63100000",
       "comment": "Validator 1 - 100 ETH"
     },
-    "0x1000000000000000000000000000000000000002": {
+    "0xc2138e6e6ebf96d5a58fa4e116a3fa7d719fc1c6": {
       "balance": "0x56BC75E2D63100000",
       "comment": "Validator 2 - 100 ETH"
     },
-    "0x1000000000000000000000000000000000000003": {
+    "0x9e433d7512ba7fd4ba01f40a1c4bd42aebf06c46": {
       "balance": "0x56BC75E2D63100000",
       "comment": "Validator 3 - 100 ETH"
     },
-    "0x1000000000000000000000000000000000000004": {
+    "0x4538ef84cbdef8d8da765e9ee78d0b1109c1de94": {
       "balance": "0x56BC75E2D63100000",
       "comment": "Validator 4 - 100 ETH"
     },
