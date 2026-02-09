@@ -12,14 +12,30 @@ BachLedger is a high-performance blockchain system that achieves this through **
 
 ```
 bachledger/
-├── rust/                   # 🦀 Rust native implementation (NEW)
-│   ├── crates/             #    Modular crate workspace
-│   └── docs/PLAN.md        #    Implementation plan
+├── rust/                   # 🦀 Rust native implementation
+│   ├── bach-primitives/    #    Core types (Address, H256, U256)
+│   ├── bach-crypto/        #    Cryptographic operations
+│   ├── bach-types/         #    Blockchain types
+│   ├── bach-evm/           #    EVM interpreter
+│   ├── bach-consensus/     #    TBFT consensus
+│   ├── bach-network/       #    P2P networking
+│   ├── bach-storage/       #    Persistent storage
+│   ├── bach-rpc/           #    JSON-RPC server
+│   ├── bach-node/          #    Full node binary
+│   └── bach-contracts/     #    Smart contract templates
 │
-├── chainmaker/             # 🔗 ChainMaker-based implementation (Legacy)
-│   ├── yzchain-go/         #    Main blockchain node
-│   ├── chain-module/       #    Core modules
-│   └── yzchain-cryptogen/  #    Certificate generator
+├── deployment/             # 🐳 Docker deployment
+│   ├── docker-compose.yml  #    4-node network config
+│   ├── Dockerfile          #    Node image
+│   └── setup.sh            #    Key generation
+│
+├── docs/                   # 📚 Documentation
+│   └── DEPLOYMENT_GUIDE.md #    Deployment & operation guide
+│
+├── contracts/              # 📜 Solidity contracts
+│   ├── MedicalRecord.sol   #    Medical record management
+│   ├── AccessControl.sol   #    Role-based access
+│   └── AuditLog.sol        #    Compliance logging
 │
 ├── paper/                  # 📄 Research paper (IEEE ICPADS 2024)
 └── assets/                 #    Project assets
@@ -33,15 +49,40 @@ A complete rewrite using Rust, featuring:
 
 - **Native OEV Architecture**: Ordering-Execution-Validation pipeline built from scratch
 - **Seamless Scheduling**: Core algorithm with Ownership Table and Priority Codes
-- **Minimal Dependencies**: Pure Rust implementation where possible
-- **EVM Compatible**: Full Solidity smart contract support
+- **TBFT Consensus**: Byzantine fault-tolerant consensus (n > 3f+1)
+- **EVM Compatible**: Full Ethereum Virtual Machine support
+- **JSON-RPC API**: Ethereum-compatible API interface
+- **800+ Tests**: Comprehensive test coverage
+
+#### Quick Start
 
 ```bash
+# Build from source
 cd rust
 cargo build --release
+
+# Or use Docker
+docker pull youngyee/bachledger-node:latest
 ```
 
-📖 See [rust/docs/PLAN.md](rust/docs/PLAN.md) for detailed design and roadmap.
+#### Run Single Node
+
+```bash
+./target/release/bach-node \
+  --data-dir ./data \
+  --rpc --rpc-addr 127.0.0.1:8545 \
+  run
+```
+
+#### Run 4-Node Network (Docker)
+
+```bash
+cd deployment
+./setup.sh           # Generate validator keys
+docker compose up -d # Start network
+```
+
+📖 See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for detailed deployment and operation guide.
 
 ### ChainMaker Implementation (Legacy)
 
