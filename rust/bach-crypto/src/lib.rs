@@ -80,12 +80,24 @@ impl PrivateKey {
     }
 
     /// Signs a message hash.
+    /// Always produces normalized (low-S) signatures to prevent malleability.
     pub fn sign(&self, message: &H256) -> Signature {
         // Message is already a hash - use prehash signing (no double-hashing)
         let (sig, recovery_id) = self.inner.sign_prehash_recoverable(message.as_bytes())
             .expect("signing should not fail with valid key");
 
-        Signature::from_k256_signature(&sig, recovery_id)
+        // Normalize to low-S to prevent signature malleability
+        let (normalized_sig, normalized_recovery_id) = if sig.normalize_s().is_some() {
+            // S was high, flip recovery ID
+            let flipped_recovery_id = RecoveryId::try_from(recovery_id.to_byte() ^ 1)
+                .expect("flipped recovery ID should be valid");
+            (sig.normalize_s().unwrap(), flipped_recovery_id)
+        } else {
+            // S was already low
+            (sig, recovery_id)
+        };
+
+        Signature::from_k256_signature(&normalized_sig, normalized_recovery_id)
     }
 }
 
@@ -189,6 +201,7 @@ impl Signature {
     }
 
     /// Creates a signature from raw bytes.
+    /// Rejects high-S signatures to prevent malleability attacks.
     pub fn from_bytes(bytes: &[u8; SIGNATURE_LENGTH]) -> Result<Self, CryptoError> {
         // Validate r and s are not zero
         let r = &bytes[0..32];
@@ -207,10 +220,16 @@ impl Signature {
         // Try to parse as k256 signature to validate r and s
         let r_arr: [u8; 32] = r.try_into().unwrap();
         let s_arr: [u8; 32] = s.try_into().unwrap();
-        K256Signature::from_scalars(
+        let k256_sig = K256Signature::from_scalars(
             k256::FieldBytes::from(r_arr),
             k256::FieldBytes::from(s_arr),
         ).map_err(|_| CryptoError::InvalidSignature)?;
+
+        // Reject high-S signatures to prevent malleability
+        // A signature is "high-S" if normalize_s() returns Some (meaning S > n/2)
+        if k256_sig.normalize_s().is_some() {
+            return Err(CryptoError::InvalidSignature);
+        }
 
         Ok(Self { bytes: *bytes })
     }

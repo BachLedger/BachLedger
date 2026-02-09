@@ -10,13 +10,17 @@ use bach_primitives::H256;
 use bach_state::{OwnershipTable, Snapshot, StateDB, StateError};
 use bach_types::{Block, PriorityCode, ReadWriteSet, Transaction};
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Default number of worker threads
 pub const DEFAULT_THREAD_COUNT: usize = 4;
 
-/// Maximum re-execution attempts per transaction
+/// Maximum scheduling iterations (safety limit)
 pub const MAX_RETRIES: usize = 100;
+
+/// Maximum re-execution attempts per individual transaction
+pub const MAX_TX_RETRIES: usize = 10;
 
 /// Errors from scheduling operations
 #[derive(Debug, Clone)]
@@ -296,6 +300,9 @@ impl Scheduler for SeamlessScheduler {
         let mut confirmed: Vec<ExecutedTransaction> = Vec::new();
         let mut reexecution_count: usize = 0;
 
+        // Track per-transaction retry counts to prevent DoS
+        let mut tx_retry_counts: HashMap<H256, usize> = HashMap::new();
+
         // Phase 1: Optimistic parallel execution
         let mut pending = self.optimistic_execute(&block, &snapshot, &ownership_table, executor);
 
@@ -325,10 +332,36 @@ impl Scheduler for SeamlessScheduler {
                 confirmed.push(etx);
             }
 
-            // Re-execute aborted transactions
+            // Re-execute aborted transactions (excluding those that exceeded per-tx retry limit)
             if !aborted.is_empty() {
-                reexecution_count += aborted.len();
-                pending = Self::re_execute(aborted, &snapshot, &ownership_table, executor);
+                let mut to_reexecute = Vec::new();
+                for etx in aborted {
+                    let tx_hash = etx.hash();
+                    let retry_count = tx_retry_counts.entry(tx_hash).or_insert(0);
+                    *retry_count += 1;
+
+                    if *retry_count <= MAX_TX_RETRIES {
+                        to_reexecute.push(etx);
+                    } else {
+                        // Transaction exceeded per-tx retry limit - mark as failed
+                        let failed_etx = ExecutedTransaction {
+                            transaction: etx.transaction,
+                            priority: etx.priority,
+                            rwset: ReadWriteSet::new(), // Empty rwset for failed tx
+                            result: ExecutionResult::Failed {
+                                reason: format!("Exceeded max retries ({})", MAX_TX_RETRIES),
+                            },
+                        };
+                        confirmed.push(failed_etx);
+                    }
+                }
+
+                if !to_reexecute.is_empty() {
+                    reexecution_count += to_reexecute.len();
+                    pending = Self::re_execute(to_reexecute, &snapshot, &ownership_table, executor);
+                } else {
+                    pending = Vec::new();
+                }
             } else {
                 pending = Vec::new();
             }
@@ -371,6 +404,4 @@ impl Scheduler for SeamlessScheduler {
     }
 }
 
-// Ensure thread safety
-unsafe impl Send for SeamlessScheduler {}
-unsafe impl Sync for SeamlessScheduler {}
+// SeamlessScheduler is automatically Send + Sync because it only contains usize
