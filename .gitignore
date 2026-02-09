@@ -33,4 +33,8 @@ rust/test-keys/
 rust/node.key
 rust/*.json
 !rust/package.json
+<<<<<<< HEAD
+.claude/settings.local.json
+=======
 .claude
+>>>>>>> trial-2
