@@ -163,16 +163,21 @@ version = "0.1.0"
 name = "bach-rpc"
 version = "0.1.0"
 dependencies = [
+ "bach-crypto",
+ "bach-evm",
  "bach-primitives",
+ "bach-state",
  "bach-storage",
  "bach-types",
  "hex",
  "jsonrpsee",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-test",
+ "tracing",
 ]
 
 [[package]]
