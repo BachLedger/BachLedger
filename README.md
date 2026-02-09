@@ -54,6 +54,15 @@ cd chainmaker/yzchain-go
 ./test-all-dockervm.sh # Go contract tests
 ```
 
+## AI-Generated Implementation Experiments
+
+The Rust implementation of BachLedger is being developed through fully AI-generated coding experiments:
+
+| Branch | Description |
+|--------|-------------|
+| [`develop`](../../tree/develop) | Trial 1 — First all-AI generated implementation |
+| [`trial-2`](../../tree/trial-2) | Trial 2 — Second all-AI generated implementation |
+
 ## Paper
 
 This is the official implementation of the research paper published at **IEEE ICPADS 2024**:
