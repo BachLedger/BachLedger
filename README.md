@@ -103,7 +103,6 @@ The Rust implementation of BachLedger is being developed through fully AI-genera
 |--------|-----------|-------------|
 | **`main`** | **ICDD Skill** | Generated via `.claude/skills/icdd/` — multi-agent TDD with interface contracts, adversarial testing, and validator scripts |
 | [`trial-1`](../../tree/trial-1) | Claude Code | Trial 1 — First all-AI generated implementation |
-| [`trial-2`](../../tree/trial-2) | Claude Code | Trial 2 — Second all-AI generated implementation |
 
 ## Paper
 
