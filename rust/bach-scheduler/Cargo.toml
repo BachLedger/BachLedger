@@ -1,0 +1,10 @@
+[package]
+name = "bach-scheduler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bach-primitives = { path = "../bach-primitives" }
+bach-crypto = { path = "../bach-crypto" }
+bach-types = { path = "../bach-types" }
+bach-state = { path = "../bach-state" }

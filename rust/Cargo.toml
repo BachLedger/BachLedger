@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "bach-primitives",
+    "bach-crypto",
+    "bach-types",
+    "bach-state",
+    "bach-scheduler",
+    "bach-evm",
+    "bach-network",
+    "bach-consensus",
+    "bach-storage",
+    "bach-node",
+]

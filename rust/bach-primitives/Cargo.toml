@@ -1,0 +1,10 @@
+[package]
+name = "bach-primitives"
+version = "0.1.0"
+edition = "2021"
+description = "Basic primitive types for BachLedger: Address, H256, H160, U256"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
