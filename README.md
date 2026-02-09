@@ -97,12 +97,13 @@ cd chainmaker/yzchain-go
 
 ## AI-Generated Implementation Experiments
 
-The Rust implementation of BachLedger is being developed through fully AI-generated coding experiments:
+The Rust implementation of BachLedger is being developed through fully AI-generated coding experiments. **The code on `main` was primarily generated using the [ICDD (Interface-Contract-Driven Development)](.claude/skills/icdd/SKILL.md) skill** — a multi-agent TDD workflow that orchestrates isolated AI agents (Architect → Tester → Coder → Reviewers → Attacker) with strict role separation and interface-first design to produce production-quality, well-tested code.
 
-| Branch | Description |
-|--------|-------------|
-| [`develop`](../../tree/develop) | Trial 1 — First all-AI generated implementation |
-| [`trial-2`](../../tree/trial-2) | Trial 2 — Second all-AI generated implementation |
+| Branch | AI Method | Description |
+|--------|-----------|-------------|
+| **`main`** | **ICDD Skill** | Generated via `.claude/skills/icdd/` — multi-agent TDD with interface contracts, adversarial testing, and validator scripts |
+| [`trial-1`](../../tree/trial-1) | Claude Code | Trial 1 — First all-AI generated implementation |
+| [`trial-2`](../../tree/trial-2) | Claude Code | Trial 2 — Second all-AI generated implementation |
 
 ## Paper
 
