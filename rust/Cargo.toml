@@ -11,5 +11,6 @@ members = [
     "bach-network",
     "bach-consensus",
     "bach-storage",
+    "bach-rpc",
     "bach-node",
 ]

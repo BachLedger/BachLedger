@@ -1,0 +1,29 @@
+[package]
+name = "bach-rpc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# JSON-RPC
+jsonrpsee = { version = "0.24", features = ["server", "macros"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hex encoding
+hex = "0.4"
+
+# Error handling
+thiserror = "1.0"
+
+# Internal dependencies
+bach-primitives = { path = "../bach-primitives" }
+bach-types = { path = "../bach-types" }
+bach-storage = { path = "../bach-storage" }
+
+[dev-dependencies]
+tokio-test = "0.4"
