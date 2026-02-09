@@ -70,13 +70,12 @@ USER bachledger
 # 30303 - P2P TCP/UDP
 EXPOSE 8545 8546 30303 30303/udp
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8545/health || exit 1
+# Health check - use eth_chainId as health indicator
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -sf -X POST http://localhost:8545 -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' || exit 1
 
 # Data volume
 VOLUME ["/data"]
 
-# Default command
+# Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["--config", "/config/node.toml"]

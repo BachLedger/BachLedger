@@ -52,5 +52,5 @@ ARGS="$ARGS --log-level ${LOG_LEVEL:-info}"
 echo "Starting node with args: $ARGS"
 echo "=========================================="
 
-# Execute the node
-exec /app/bach-node run $ARGS "$@"
+# Execute the node (global args before subcommand)
+exec /app/bach-node $ARGS run "$@"
