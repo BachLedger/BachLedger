@@ -13,6 +13,7 @@ bach-evm = { path = "../bach-evm" }
 bach-consensus = { path = "../bach-consensus" }
 bach-network = { path = "../bach-network" }
 bach-storage = { path = "../bach-storage" }
+bach-rpc = { path = "../bach-rpc" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

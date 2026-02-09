@@ -141,6 +141,7 @@ dependencies = [
  "bach-evm",
  "bach-network",
  "bach-primitives",
+ "bach-rpc",
  "bach-scheduler",
  "bach-state",
  "bach-storage",
