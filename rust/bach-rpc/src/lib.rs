@@ -502,6 +502,10 @@ pub trait EthApi {
     /// Returns the current gas price
     #[method(name = "gasPrice")]
     async fn gas_price(&self) -> RpcResult<String>;
+
+    /// Sets the balance of an account (development only)
+    #[method(name = "setBalance")]
+    async fn set_balance(&self, address: String, balance: String) -> RpcResult<bool>;
 }
 
 /// Net namespace RPC methods
@@ -1186,6 +1190,18 @@ impl EthApiServer for EthApiImpl {
     async fn gas_price(&self) -> RpcResult<String> {
         // Return a fixed gas price of 1 gwei for now
         Ok("0x3b9aca00".to_string())
+    }
+
+    async fn set_balance(&self, address: String, balance: String) -> RpcResult<bool> {
+        let addr = parse_address(&address)
+            .map_err(|e| jsonrpsee::types::ErrorObjectOwned::from(e))?;
+        let bal = parse_u256(&balance)
+            .map_err(|e| jsonrpsee::types::ErrorObjectOwned::from(e))?;
+
+        let mut evm_state = self.state.evm_state.write().unwrap();
+        evm_state.set_balance(&addr, bal);
+        tracing::info!("Set balance for {:?} to {:?}", addr, bal);
+        Ok(true)
     }
 }
 
